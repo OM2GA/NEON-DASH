@@ -947,10 +947,18 @@ function endGame() {
         reviveBtn.innerText = "REVIVRE";
     }
 
-    setTimeout(() => {
-        showScreen('deathScreen');
-        startDeathTimer();
-    }, 500);
+    if (peer && (conn || connections.length > 0)) {
+        // En Multijoueur, on passe directement au score puis au spectateur
+        setTimeout(() => {
+            confirmDeath();
+        }, 800);
+    } else {
+        // En Solo, on garde le système de revive
+        setTimeout(() => {
+            showScreen('deathScreen');
+            startDeathTimer();
+        }, 500);
+    }
 }
 
 function startDeathTimer() {
@@ -1007,12 +1015,9 @@ function confirmDeath() {
 
     // Si on est en multi, passage automatique en mode spectateur après un court délai
     if (peer && (conn || connections.length > 0)) {
-        const spectateBtn = document.getElementById('spectateBtn');
-        if (spectateBtn) spectateBtn.style.display = 'block';
-
         setTimeout(() => {
             startSpectating();
-        }, 3000); // 3 secondes pour voir ses points gagnés
+        }, 2000); // 2 secondes pour voir ses points gagnés
     }
 
     updateNéonUI();
@@ -1026,14 +1031,18 @@ document.getElementById('playerName').addEventListener('change', (e) => {
 function startSpectating() {
     // Si on est déjà revenu au menu ou si on n'est plus en multi, on ne fait rien
     const currentScreen = document.querySelector('.screen-active')?.id;
-    if (currentScreen !== 'gameOver' && currentScreen !== 'deathScreen') return;
+    if (currentScreen !== 'gameOver' && currentScreen !== 'deathScreen' && currentScreen !== 'gameUI') return;
     if (!peer || (!conn && connections.length === 0)) return;
 
     isSpectating = true;
     showScreen('gameUI');
     gameActive = true;
-    lastTime = performance.now();
-    requestAnimationFrame(loop);
+
+    // Si la boucle n'est pas déjà en cours (cas improbable ici mais securité)
+    if (!lastTime || !gameActive) {
+        lastTime = performance.now();
+        requestAnimationFrame(loop);
+    }
 }
 
 function backToMenu() {
