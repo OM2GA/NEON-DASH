@@ -77,6 +77,7 @@ let players = {}; // {id: {x, y, pseudo, color, isAlive, isReady, shape, partCol
 let isReady = false;
 let isSpectating = false;
 let spectatedPlayerId = null;
+let gameEndingTimeout = null;
 
 // Chargement du pseudo au démarrage
 window.addEventListener('DOMContentLoaded', () => {
@@ -183,7 +184,6 @@ function startGame(themeKey, isMulti = false) {
 
     isSpectating = false;
     spectatedPlayerId = null;
-    document.getElementById('spectateBtn').style.display = 'none';
 
     // Si on lance en solo alors qu'on était en multi, on coupe les ponts pour éviter les interférences
     if (!isMulti && peer && (conn || connections.length > 0)) {
@@ -539,6 +539,9 @@ function setupConnHandlers(c) {
                 gameSpeed = data.speed;
             }
         }
+        if (data.type === 'show-game-over') {
+            confirmDeath();
+        }
     });
 
     c.on('close', () => {
@@ -833,6 +836,9 @@ function draw() {
     const partColor = customColors[activeParticleColor].value || currentTheme.player;
 
     trail.forEach((pos, index) => {
+        // En multi, on cache aussi la traînée si on est mort
+        if (peer && (conn || connections.length > 0) && isSpectating) return;
+
         ctx.globalAlpha = ((CONFIG.trailMax - index) / CONFIG.trailMax) * 0.3;
         ctx.save();
         ctx.translate(pos.x + player.size / 2, pos.y + player.size / 2);
@@ -851,21 +857,25 @@ function draw() {
 
     // Joueur local
     if (gameActive) {
-        ctx.save();
-        ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
+        // En multi, on ne dessine plus le joueur local s'il est mort/spectateur pour qu'il "disparaisse"
+        const isMulti = peer && (conn || connections.length > 0);
+        if (!isMulti || !isSpectating) {
+            ctx.save();
+            ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
 
-        if (isSpectating) {
-            ctx.globalAlpha = 0.4; // Semi-transparent si spectateur
-        } else {
-            currentRotation += (targetRotation - currentRotation) * 0.15;
+            if (isSpectating) {
+                ctx.globalAlpha = 0.4; // Semi-transparent si spectateur (solo uniquement maintenant)
+            } else {
+                currentRotation += (targetRotation - currentRotation) * 0.15;
+            }
+
+            ctx.rotate(currentRotation);
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = pColor;
+            ctx.fillStyle = pColor;
+            style.draw(ctx, 0, 0, player.size);
+            ctx.restore();
         }
-
-        ctx.rotate(currentRotation);
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = pColor;
-        ctx.fillStyle = pColor;
-        style.draw(ctx, 0, 0, player.size);
-        ctx.restore();
     }
 
     if (isSpectating) {
@@ -930,30 +940,30 @@ function endGame() {
         };
         if (isHost) connections.forEach(c => c.send(myData));
         else if (conn) conn.send(myData);
+
+        // En Multijoueur, on enregistre les scores silencieusement et on reste en jeu (Spectateur)
+        const best = Math.floor(Math.max(score, localStorage.getItem(`best_${activeThemeKey}`) || 0));
+        localStorage.setItem(`best_${activeThemeKey}`, best);
+        totalNéons += currentSessionNéons;
+        localStorage.setItem('totalNéons', totalNéons);
+
+        // On n'appelle PAS confirmDeath immédiatement pour ne pas couper l'immersion
+        // Seul le checkAutoReturnToLobby déclenchera la fin pour tout le monde
+        checkAutoReturnToLobby();
     } else {
         gameActive = false;
-    }
-
-    // Calculer le coût de revive
-    reviveCost = 10 + (revivesInSession * 15);
-    reviveCostElement.innerText = reviveCost;
-
-    // Désactiver le bouton si pas assez de néons
-    if (totalNéons < reviveCost) {
-        reviveBtn.disabled = true;
-        reviveBtn.innerText = "PAS ASSEZ DE NÉONS";
-    } else {
-        reviveBtn.disabled = false;
-        reviveBtn.innerText = "REVIVRE";
-    }
-
-    if (peer && (conn || connections.length > 0)) {
-        // En Multijoueur, on passe directement au score puis au spectateur
-        setTimeout(() => {
-            confirmDeath();
-        }, 800);
-    } else {
         // En Solo, on garde le système de revive
+        reviveCost = 10 + (revivesInSession * 15);
+        reviveCostElement.innerText = reviveCost;
+
+        if (totalNéons < reviveCost) {
+            reviveBtn.disabled = true;
+            reviveBtn.innerText = "PAS ASSEZ DE NÉONS";
+        } else {
+            reviveBtn.disabled = false;
+            reviveBtn.innerText = "REVIVRE";
+        }
+
         setTimeout(() => {
             showScreen('deathScreen');
             startDeathTimer();
@@ -1003,25 +1013,26 @@ function revivePlayer() {
 }
 
 function confirmDeath() {
-    clearInterval(deathTimer);
+    gameActive = false; // Stop the loop and sync
+    isSpectating = false;
+    if (gameEndingTimeout) { clearTimeout(gameEndingTimeout); gameEndingTimeout = null; }
+    if (deathTimer) clearInterval(deathTimer);
+
     const best = Math.floor(Math.max(score, localStorage.getItem(`best_${activeThemeKey}`) || 0));
     localStorage.setItem(`best_${activeThemeKey}`, best);
-    totalNéons += currentSessionNéons;
-    localStorage.setItem('totalNéons', totalNéons);
+
+    // Si on est déjà passé par endGame (multi), currentSessionNéons a déjà été ajouté
+    // on évite de l'ajouter deux fois si confirmDeath est appelé manuellement
+    if (!isSpectating && currentSessionNéons > 0 && !document.getElementById('gameOver').classList.contains('screen-active')) {
+        totalNéons += currentSessionNéons;
+        localStorage.setItem('totalNéons', totalNéons);
+    }
 
     showScreen('gameOver');
     earnedNéonsElement.innerText = `+${currentSessionNéons}`;
     finalScoreElement.innerHTML = `<span style="color: ${currentTheme.player}">${currentTheme.name}</span><br>SCORE: ${Math.floor(score)}<br><span style="font-size: 0.8em; color: #ffd700;">RECORD: ${best}</span>`;
 
-    // Si on est en multi, passage automatique en mode spectateur après un court délai
-    if (peer && (conn || connections.length > 0)) {
-        setTimeout(() => {
-            startSpectating();
-        }, 2000); // 2 secondes pour voir ses points gagnés
-    }
-
     updateNéonUI();
-    checkAutoReturnToLobby();
 }
 
 document.getElementById('playerName').addEventListener('change', (e) => {
@@ -1046,35 +1057,45 @@ function startSpectating() {
 }
 
 function backToMenu() {
+    gameActive = false;
     isSpectating = false;
-    showScreen('menu');
-    updateNéonUI();
+    if (gameEndingTimeout) { clearTimeout(gameEndingTimeout); gameEndingTimeout = null; }
+
+    if (peer && (conn || connections.length > 0)) {
+        returnToLobby();
+    } else {
+        showScreen('menu');
+        updateNéonUI();
+    }
 }
 
 // Système de retour au salon automatique
 function checkAutoReturnToLobby() {
     if (!peer || (!conn && connections.length === 0)) return;
+    if (gameEndingTimeout) return; // Déjà en cours de fin
 
-    // Seul l'hôte décide du retour
+    // Seul l'hôte décide du moment où tout le monde a perdu
     if (isHost) {
         // Un joueur est en vie s'il n'est pas spectateur ET que la partie est active
         const localAlive = gameActive && !isSpectating;
         const othersAlive = Object.keys(players).some(id => players[id].isAlive === true || players[id].isAlive === "true");
 
         if (!localAlive && !othersAlive) {
-            console.log("Tout le monde est mort, retour au lobby...");
-            setTimeout(() => {
-                // On revérifie au cas où quelqu'un a utilisé un revive entre temps
+            console.log("Tout le monde est mort, affichage des scores finaux...");
+            gameEndingTimeout = setTimeout(() => {
+                // On revérifie au cas où
                 const stillNoneAlive = (!gameActive || isSpectating) &&
                     Object.keys(players).every(id => players[id].isAlive === false || players[id].isAlive === "false");
 
                 if (stillNoneAlive) {
+                    // On envoie le signal à tout le monde d'afficher son écran de score
                     connections.forEach(c => {
-                        if (c.open) c.send({ type: 'back-to-lobby' });
+                        if (c.open) c.send({ type: 'show-game-over' });
                     });
-                    returnToLobby();
+                    confirmDeath();
                 }
-            }, 3000); // Délai un peu plus long pour laisser voir les scores de tout le monde
+                gameEndingTimeout = null;
+            }, 2000); // Délai pour laisser finir les dernières animations de mort
         }
     }
 }
