@@ -137,7 +137,11 @@
                 <span class="earned-label">NÉONS GAGNÉS</span>
                 <span id="earnedNéons" class="earned-value">+0</span>
             </div>
-            <button onclick="backToMenu()" class="btn-primary">RETOUR AU MENU</button>
+            <div class="game-over-actions" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                <button onclick="backToMenu()" class="btn-primary">RETOUR AU MENU</button>
+                <button id="spectateBtn" onclick="startSpectating()" class="btn-secondary"
+                    style="display: none;">SPECTATEUR</button>
+            </div>
         </section>
     </main>
 

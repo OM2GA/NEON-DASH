@@ -74,6 +74,8 @@ let conn = null; // Connexion unique si on est client
 let connections = []; // Liste des connexions si on est host
 let isHost = false;
 let players = {}; // Contient les positions des autres joueurs
+let isSpectating = false;
+let spectatedPlayerId = null;
 
 // Chargement du pseudo au démarrage
 window.addEventListener('DOMContentLoaded', () => {
@@ -154,6 +156,10 @@ function startGame(themeKey) {
     showScreen('gameUI');
     canvas.style.backgroundColor = currentTheme.bg;
     bestElement.innerText = `Record: ${Math.floor(localStorage.getItem(`best_${themeKey}`) || 0)}`;
+
+    isSpectating = false;
+    spectatedPlayerId = null;
+    document.getElementById('spectateBtn').style.display = 'none';
 
     resetStats();
     initBackground();
@@ -438,7 +444,8 @@ function update(dt) {
             y: player.y,
             pseudo: document.getElementById('playerName').value || "Anonyme",
             shape: activeParticle,
-            color: customColors[activePlayerColor].value || currentTheme.player
+            color: customColors[activePlayerColor].value || currentTheme.player,
+            isAlive: gameActive && !isSpectating
         };
 
         if (isHost) {
@@ -447,6 +454,41 @@ function update(dt) {
             conn.send(myData);
         }
     }
+
+    if (isSpectating) {
+        // En mode spectateur, on ne gère que les éléments visuels
+        backgroundLayers.forEach(layer => layer.forEach(s => { s.x -= gameSpeed * s.speed * factor; if (s.x < -20) s.x = CONFIG.baseWidth + 20; }));
+
+        obstacles.forEach((o, i) => {
+            o.x -= gameSpeed * factor;
+            if (o.x + o.w < 0) obstacles.splice(i, 1);
+        });
+
+        coins.forEach((c, i) => {
+            c.x -= gameSpeed * factor; c.pulse += 0.1 * factor;
+            if (c.x + c.size < 0 || c.collected) coins.splice(i, 1);
+        });
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx * factor; p.y += p.vy * factor; p.life -= 0.02 * factor;
+            if (p.life <= 0) particles.splice(i, 1);
+        }
+
+        lastObstacleTime += dt;
+        if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
+            const isTop = Math.random() > 0.5;
+            const h = 60 + Math.random() * 120;
+            obstacles.push({ x: CONFIG.baseWidth, y: isTop ? 0 : CONFIG.baseHeight - h, w: 35, h: h });
+            lastObstacleTime = 0;
+        }
+
+        lastCoinTime += dt;
+        if (lastCoinTime > CONFIG.coinInterval) { createCoin(); lastCoinTime = 0; }
+
+        return;
+    }
+
     if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
     if (shakeAmount > 0) shakeAmount *= 0.9;
 
@@ -530,12 +572,13 @@ function draw() {
             ctx.restore();
 
             // Pseudo
-            ctx.fillStyle = "white";
+            ctx.fillStyle = p.isAlive === false ? "rgba(255,255,255,0.4)" : "white";
             ctx.font = "bold 12px Rajdhani";
             ctx.textAlign = "center";
-            ctx.fillText(p.pseudo, CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
+            ctx.fillText(p.pseudo + (p.isAlive === false ? " (MORT)" : ""), CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
         }
     });
+
 
     backgroundLayers.forEach((layer, index) => {
         ctx.fillStyle = currentTheme.obs + (index === 0 ? "22" : index === 1 ? "44" : "66");
@@ -572,8 +615,28 @@ function draw() {
     currentRotation += (targetRotation - currentRotation) * 0.15;
     ctx.rotate(currentRotation);
     ctx.shadowBlur = 15; ctx.shadowColor = pColor; ctx.fillStyle = pColor;
+    if (isSpectating) ctx.globalAlpha = 0.3;
     style.draw(ctx, 0, 0, player.size);
     ctx.restore();
+
+    if (isSpectating) {
+        ctx.fillStyle = "white";
+        ctx.font = "bold 20px Rajdhani";
+        ctx.textAlign = "center";
+        ctx.fillText("MODE SPECTATEUR", CONFIG.baseWidth / 2, 40);
+
+        // Bonus: Flèche au dessus du joueur suivi s'il y en a un qui est vivant
+        const alivePlayers = Object.keys(players).filter(id => players[id].isAlive !== false);
+        if (alivePlayers.length > 0) {
+            const firstAlive = players[alivePlayers[0]];
+            ctx.fillStyle = firstAlive.color;
+            ctx.beginPath();
+            ctx.moveTo(CONFIG.playerX + CONFIG.playerSize / 2, firstAlive.y - 25);
+            ctx.lineTo(CONFIG.playerX + CONFIG.playerSize / 2 - 5, firstAlive.y - 35);
+            ctx.lineTo(CONFIG.playerX + CONFIG.playerSize / 2 + 5, firstAlive.y - 35);
+            ctx.fill();
+        }
+    }
 
     ctx.shadowBlur = 10; ctx.shadowColor = currentTheme.obs; ctx.fillStyle = currentTheme.obs;
     obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
@@ -596,7 +659,7 @@ function loop(timestamp) {
     requestAnimationFrame(loop);
 }
 
-function switchGravity() { if (gameActive) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; shakeAmount = 8; } }
+function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; shakeAmount = 8; } }
 
 function endGame() {
     gameActive = false;
@@ -671,10 +734,28 @@ function confirmDeath() {
     showScreen('gameOver');
     earnedNéonsElement.innerText = `+${currentSessionNéons}`;
     finalScoreElement.innerHTML = `<span style="color: ${currentTheme.player}">${currentTheme.name}</span><br>SCORE: ${Math.floor(score)}<br><span style="font-size: 0.8em; color: #ffd700;">RECORD: ${best}</span>`;
+
+    // Si on est en multi, on peut spectate
+    if (peer && (conn || connections.length > 0)) {
+        document.getElementById('spectateBtn').style.display = 'block';
+    }
+
     updateNéonUI();
 }
 
-function backToMenu() { showScreen('menu'); updateNéonUI(); }
+function startSpectating() {
+    isSpectating = true;
+    showScreen('gameUI');
+    gameActive = true;
+    lastTime = performance.now();
+    requestAnimationFrame(loop);
+}
+
+function backToMenu() {
+    isSpectating = false;
+    showScreen('menu');
+    updateNéonUI();
+}
 updateNéonUI();
 // Initialiser le premier écran
 showScreen('menu');
