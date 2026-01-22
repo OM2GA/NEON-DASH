@@ -1,5 +1,7 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+const menuCanvas = document.getElementById('menuCanvas');
+const menuCtx = menuCanvas.getContext('2d');
 const scoreElement = document.getElementById('score');
 const bestElement = document.getElementById('bestScore');
 const menu = document.getElementById('menu');
@@ -57,10 +59,107 @@ let deathTimer = null;
 let deathTimeLeft = 100; // Pourcentage
 let reviveCost = 10;
 let revivesInSession = 0;
+
+// Paramètres (chargement depuis localStorage ou valeurs par défaut)
+let settings = {
+    volume: parseInt(localStorage.getItem('setting_volume')) ?? 50,
+    particleDensity: localStorage.getItem('setting_particleDensity') || 'medium',
+    autoRevive: localStorage.getItem('setting_autoRevive') === 'true'
+};
+
+let menuShapes = [];
+function initMenuBackground() {
+    menuShapes = [];
+    for (let i = 0; i < 15; i++) {
+        menuShapes.push({
+            x: Math.random() * window.innerWidth,
+            y: Math.random() * window.innerHeight,
+            size: Math.random() * 100 + 50,
+            vx: (Math.random() - 0.5) * 0.3,
+            vy: (Math.random() - 0.5) * 0.3,
+            color: Math.random() > 0.5 ? '#00ffcc' : '#a855f7',
+            alpha: Math.random() * 0.1 + 0.05,
+            rotation: Math.random() * Math.PI * 2,
+            vrot: (Math.random() - 0.5) * 0.005,
+            points: Math.floor(Math.random() * 3) + 3 // 3=triangle, 4=square, 5=pentagon
+        });
+    }
+}
+initMenuBackground();
 // Gestion de la rotation
 let targetRotation = 0;
 let currentRotation = 0;
 let activeThemeKey = 'neon';
+
+// Système de Musique
+const playlists = {
+    neon: [
+        "musiques/DLVrai.mp3",
+        "musiques/LAYLOW - SPECIAL feat NEKFEU & FOUSHEÉ (paroles).mp3",
+        "musiques/Ziak - Galerie (Prod. Devil).mp3"
+    ],
+    lava: [
+        "musiques/GAZO - DIE (Visualizer).mp3",
+        "musiques/H.mp3",
+        "musiques/SCH - Autobahn (Audio Officiel) 2023.mp3"
+    ],
+    ice: [
+        "musiques/Damso- smog.mp3",
+        "musiques/Free YSL.mp3",
+        "musiques/Freeze Raël.mp3"
+    ]
+};
+
+let currentAudio = null;
+let currentPlaylist = [];
+let currentSongIndex = 0;
+
+function playThemeMusic(themeKey) {
+    stopMusic(); // Arrêter toute musique en cours
+
+    // On récupère la playlist du thème et on la mélange (shuffle)
+    currentPlaylist = [...playlists[themeKey]].sort(() => Math.random() - 0.5);
+    currentSongIndex = 0;
+
+    playNextSong();
+}
+
+function playNextSong() {
+    if (!gameActive && !isSpectating) return;
+    if (currentPlaylist.length === 0) return;
+
+    const songPath = currentPlaylist[currentSongIndex];
+    console.log("Lecture de :", songPath);
+
+    // encodeURI est crucial pour les noms de fichiers avec des espaces ou des accents
+    currentAudio = new Audio(encodeURI(songPath));
+    currentAudio.volume = (settings.volume / 100) * 0.5; // Appliquer le volume des paramètres (avec un max de 0.5 pour l'équilibre)
+
+    currentAudio.play().catch(e => {
+        console.warn("La lecture automatique a été bloquée par le navigateur. Cliquez n'importe où pour activer le son.");
+        // Tentative de relance au prochain clic si bloqué
+        window.addEventListener('mousedown', () => {
+            if (currentAudio && currentAudio.paused && (gameActive || isSpectating)) {
+                currentAudio.play();
+            }
+        }, { once: true });
+    });
+
+    currentAudio.addEventListener('ended', () => {
+        if (gameActive || isSpectating) {
+            currentSongIndex = (currentSongIndex + 1) % currentPlaylist.length;
+            playNextSong();
+        }
+    });
+}
+
+function stopMusic() {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio.currentTime = 0;
+        currentAudio = null;
+    }
+}
 let lastTime = 0;
 let lastObstacleTime = 0;
 let lastCoinTime = 0;
@@ -108,6 +207,8 @@ function resize() {
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;
+    menuCanvas.width = width * dpr;
+    menuCanvas.height = height * dpr;
 
     // Centrage du canvas : on calcule les offsets
     const offsetX = (width - (virtualWidth * scaleFactor)) / 2;
@@ -117,6 +218,9 @@ function resize() {
     ctx.scale(dpr, dpr);
     ctx.translate(offsetX, offsetY);
     ctx.scale(scaleFactor, scaleFactor);
+
+    menuCtx.setTransform(1, 0, 0, 1, 0, 0);
+    menuCtx.scale(dpr, dpr);
 
     // On garde les dimensions de base fixes pour le moteur de jeu
     CONFIG.baseWidth = virtualWidth;
@@ -142,6 +246,31 @@ function showScreen(screenId) {
             }
         }
     });
+
+    // Gestion de l'overlay spectateur
+    const spectatorQuitBtn = document.getElementById('spectatorQuitBtn');
+    if (spectatorQuitBtn) {
+        spectatorQuitBtn.style.display = (screenId === 'gameUI' && isSpectating) ? 'block' : 'none';
+    }
+
+    // Mise à jour de l'UI des paramètres si on ouvre cet écran
+    if (screenId === 'settings') {
+        updateSettingsUI();
+    }
+}
+
+function updateSettingsUI() {
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeValue = document.getElementById('volumeValue');
+    const densitySelect = document.getElementById('particleDensity');
+    const autoReviveToggle = document.getElementById('autoReviveToggle');
+    const pseudoSettings = document.getElementById('playerPseudoSettings');
+
+    volumeSlider.value = settings.volume;
+    volumeValue.innerText = settings.volume;
+    densitySelect.value = settings.particleDensity;
+    autoReviveToggle.checked = settings.autoRevive;
+    pseudoSettings.value = localStorage.getItem('playerPseudo') || "";
 }
 
 
@@ -197,9 +326,9 @@ function startGame(themeKey, isMulti = false) {
 
     resetStats();
     initBackground();
-    gameActive = true;
+    gameActive = true; // Activer le jeu avant de lancer la musique
+    playThemeMusic(themeKey);
     lastTime = performance.now();
-    requestAnimationFrame(loop);
 }
 
 function resetStats() {
@@ -354,6 +483,11 @@ function processColor(key, isPlayer) {
 }
 
 function createParticle(x, y, vx, vy, color, size) {
+    // Filtrage selon la densité de particules
+    if (settings.particleDensity === 'low' && Math.random() > 0.3) return;
+    if (settings.particleDensity === 'medium' && Math.random() > 0.7) return;
+    // 'high' laisse tout passer
+
     particles.push({ x, y, vx, vy, life: 1.0, size, style: activeParticle, color });
 }
 
@@ -550,6 +684,7 @@ function setupConnHandlers(c) {
         } else {
             conn = null;
         }
+        delete players[c.peer];
         updateLobbyUI();
     });
 }
@@ -779,7 +914,9 @@ function checkCollision(p, o) {
 
 function draw() {
     ctx.save();
-    if (shakeAmount > 0.1) ctx.translate((Math.random() - 0.5) * shakeAmount, (Math.random() - 0.5) * shakeAmount);
+    if (shakeAmount > 0.1) {
+        ctx.translate((Math.random() - 0.5) * shakeAmount, (Math.random() - 0.5) * shakeAmount);
+    }
     ctx.clearRect(-100, -100, 800 + 200, 400 + 200);
 
     // Dessiner les autres joueurs
@@ -910,12 +1047,79 @@ function draw() {
 }
 
 function loop(timestamp) {
-    if (!gameActive) return;
+    // La boucle tourne TOUJOURS pour le fond
     if (!lastTime) lastTime = timestamp;
-    update(Math.min(100, timestamp - lastTime));
+    const dt = Math.min(100, timestamp - lastTime);
     lastTime = timestamp;
-    draw();
+
+    drawMenuBackground();
+
+    if (gameActive) {
+        update(dt);
+        draw();
+    }
+
     requestAnimationFrame(loop);
+}
+
+function drawMenuBackground() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    menuCtx.clearRect(0, 0, width, height);
+
+    // Grid animée
+    const gridSize = 60;
+    const time = performance.now() * 0.001;
+    const offsetX = (gameActive ? score * 5 : time * 15) % gridSize;
+
+    menuCtx.lineWidth = 1;
+    menuCtx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+
+    for (let x = -offsetX; x < width; x += gridSize) {
+        menuCtx.beginPath();
+        menuCtx.moveTo(x, 0);
+        menuCtx.lineTo(x, height);
+        menuCtx.stroke();
+    }
+    for (let y = 0; y < height; y += gridSize) {
+        menuCtx.beginPath();
+        menuCtx.moveTo(0, y);
+        menuCtx.lineTo(width, y);
+        menuCtx.stroke();
+    }
+
+    // Formes flottantes
+    menuShapes.forEach(s => {
+        s.x += s.vx;
+        s.y += s.vy;
+        s.rotation += s.vrot;
+
+        if (s.x < -s.size) s.x = width + s.size;
+        if (s.x > width + s.size) s.x = -s.size;
+        if (s.y < -s.size) s.y = height + s.size;
+        if (s.y > height + s.size) s.y = -s.size;
+
+        menuCtx.save();
+        menuCtx.translate(s.x, s.y);
+        menuCtx.rotate(s.rotation);
+        menuCtx.globalAlpha = s.alpha;
+        menuCtx.strokeStyle = s.color;
+        menuCtx.lineWidth = 2;
+        menuCtx.shadowBlur = 15;
+        menuCtx.shadowColor = s.color;
+
+        menuCtx.beginPath();
+        for (let i = 0; i < s.points; i++) {
+            const angle = (i / s.points) * Math.PI * 2;
+            const px = Math.cos(angle) * s.size;
+            const py = Math.sin(angle) * s.size;
+            if (i === 0) menuCtx.moveTo(px, py);
+            else menuCtx.lineTo(px, py);
+        }
+        menuCtx.closePath();
+        menuCtx.stroke();
+        menuCtx.restore();
+    });
 }
 
 function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; } }
@@ -927,6 +1131,7 @@ function endGame() {
     if (peer && (conn || connections.length > 0)) {
         isSpectating = true;
         gameActive = true;
+        showScreen('gameUI');
 
         const myData = {
             type: 'sync',
@@ -962,6 +1167,12 @@ function endGame() {
         } else {
             reviveBtn.disabled = false;
             reviveBtn.innerText = "REVIVRE";
+
+            // Auto-Revive automatique si activé
+            if (settings.autoRevive) {
+                setTimeout(revivePlayer, 500);
+                return; // Sortir pour ne pas afficher l'écran de mort classique trop longtemps
+            }
         }
 
         setTimeout(() => {
@@ -1007,7 +1218,6 @@ function revivePlayer() {
         gameActive = true;
         isSpectating = false; // Reset spectator state when reviving
         lastTime = performance.now();
-        requestAnimationFrame(loop);
         updateNéonUI();
     }
 }
@@ -1029,6 +1239,7 @@ function confirmDeath() {
     }
 
     showScreen('gameOver');
+    stopMusic();
     earnedNéonsElement.innerText = `+${currentSessionNéons}`;
     finalScoreElement.innerHTML = `<span style="color: ${currentTheme.player}">${currentTheme.name}</span><br>SCORE: ${Math.floor(score)}<br><span style="font-size: 0.8em; color: #ffd700;">RECORD: ${best}</span>`;
 
@@ -1048,12 +1259,16 @@ function startSpectating() {
     isSpectating = true;
     showScreen('gameUI');
     gameActive = true;
+    lastTime = performance.now();
+}
 
-    // Si la boucle n'est pas déjà en cours (cas improbable ici mais securité)
-    if (!lastTime || !gameActive) {
-        lastTime = performance.now();
-        requestAnimationFrame(loop);
-    }
+function quitSpectating() {
+    quitLobby();
+    isSpectating = false;
+    gameActive = false;
+    showScreen('menu');
+    stopMusic();
+    updateNéonUI();
 }
 
 function backToMenu() {
@@ -1143,6 +1358,33 @@ function quitLobby() {
 updateNéonUI();
 // Initialiser le premier écran
 showScreen('menu');
+// Démarrer la boucle infinie pour le fond
+requestAnimationFrame(loop);
+
 window.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); switchGravity(); } });
 canvas.addEventListener('mousedown', e => { e.preventDefault(); switchGravity(); });
 canvas.addEventListener('touchstart', e => { e.preventDefault(); switchGravity(); }, { passive: false });
+
+// Écouteurs pour le menu Paramètres
+document.getElementById('volumeSlider').addEventListener('input', (e) => {
+    settings.volume = parseInt(e.target.value);
+    document.getElementById('volumeValue').innerText = settings.volume;
+    if (currentAudio) currentAudio.volume = settings.volume / 100;
+    localStorage.setItem('setting_volume', settings.volume);
+});
+
+document.getElementById('particleDensity').addEventListener('change', (e) => {
+    settings.particleDensity = e.target.value;
+    localStorage.setItem('setting_particleDensity', settings.particleDensity);
+});
+
+document.getElementById('autoReviveToggle').addEventListener('change', (e) => {
+    settings.autoRevive = e.target.checked;
+    localStorage.setItem('setting_autoRevive', settings.autoRevive);
+});
+
+document.getElementById('playerPseudoSettings').addEventListener('input', (e) => {
+    const pseudo = e.target.value.trim();
+    localStorage.setItem('playerPseudo', pseudo);
+    document.getElementById('playerName').value = pseudo;
+});

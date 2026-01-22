@@ -8,9 +8,13 @@
     <meta name="description"
         content="Défiez la gravité dans NEON DASH, un jeu de course 3D minimaliste avec des mondes néon, lave et glace. Score illimité et gameplay addictif.">
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="favicon.png">
 </head>
 
 <body>
+
+    <div id="bg-decoration"></div>
+    <canvas id="menuCanvas"></canvas>
 
     <main id="app">
         <!-- Menu Principal -->
@@ -40,7 +44,43 @@
                     SKINS</button>
                 <button class="btn-shop" onclick="openMultiMenu()"
                     style="border-color: #a855f7; color: #a855f7;">MULTIJOUEUR (P2P)</button>
+                <button class="btn-shop" onclick="showScreen('settings')"
+                    style="border-color: #00ffcc; color: #00ffcc;">PARAMÈTRES</button>
             </div>
+        </section>
+
+        <!-- Paramètres -->
+        <section id="settings" class="shop">
+            <h2>PARAMÈTRES</h2>
+            <div class="settings-container">
+                <div class="setting-group">
+                    <label>Pseudo</label>
+                    <input type="text" id="playerPseudoSettings" placeholder="Ton Pseudo" class="multi-input">
+                </div>
+
+                <div class="setting-group">
+                    <label>Volume Musique (<span id="volumeValue">50</span>%)</label>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="50" class="neon-slider">
+                </div>
+
+                <div class="setting-group">
+                    <label>Densité Particules</label>
+                    <select id="particleDensity" class="neon-select">
+                        <option value="low">Faible</option>
+                        <option value="medium" selected>Normale</option>
+                        <option value="high">Élevée</option>
+                    </select>
+                </div>
+
+                <div class="setting-group flex-row">
+                    <label>Auto-Revive (Néons)</label>
+                    <label class="switch">
+                        <input type="checkbox" id="autoReviveToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+            <button onclick="showScreen('menu')" class="btn-secondary">RETOUR AU MENU</button>
         </section>
 
         <!-- Boutique -->
@@ -129,6 +169,8 @@
                 <div id="currentNéonsHUD">Néons: 0</div>
             </div>
             <canvas id="gameCanvas"></canvas>
+            <button id="spectatorQuitBtn" onclick="quitSpectating()" class="btn-quit-spectator"
+                style="display: none;">QUITTER LA PARTIE</button>
         </section>
 
         <!-- Écran de Mort (Compte à rebours / Revivre) -->

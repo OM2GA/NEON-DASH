@@ -16,11 +16,35 @@
 
 body {
     overflow: hidden;
-    background: radial-gradient(circle at center, #111827 0%, #05070a 100%);
+    background: #05070a;
     font-family: 'Rajdhani', sans-serif;
     color: white;
     height: 100vh;
     width: 100vw;
+}
+
+#bg-decoration {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background:
+        radial-gradient(circle at 20% 30%, rgba(0, 255, 204, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at center, transparent 0%, rgba(5, 7, 10, 0.4) 100%),
+        radial-gradient(circle at center, #111827 0%, #05070a 100%);
+    z-index: -2;
+}
+
+#menuCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
 }
 
 #app {
@@ -766,4 +790,162 @@ button:hover::after {
     color: white;
     text-align: center;
     font-family: 'Orbitron', sans-serif;
+}
+
+
+.btn-quit-spectator {
+    position: absolute;
+    bottom: 30px;
+    right: 30px;
+    padding: 12px 24px;
+    background: rgba(255, 0, 85, 0.1);
+    border: 2px solid #ff0055;
+    color: #ff0055;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 900;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 0 15px rgba(255, 0, 85, 0.3);
+    transition: all 0.3s ease;
+    z-index: 1000;
+}
+
+.btn-quit-spectator:hover {
+    background: rgba(255, 0, 85, 0.2);
+    box-shadow: 0 0 25px rgba(255, 0, 85, 0.5);
+    transform: scale(1.05);
+}
+
+/* --- SETTINGS STYLES --- */
+.settings-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    padding: 1rem 0;
+    text-align: left;
+}
+
+.setting-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.setting-group.flex-row {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.setting-group label {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Neon Sliders */
+.neon-slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 100px;
+    outline: none;
+}
+
+.neon-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 10px var(--accent);
+    transition: all 0.2s ease;
+}
+
+.neon-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 20px var(--accent);
+}
+
+/* Neon Select */
+.neon-select {
+    background: #0f172a;
+    /* Fond sombre forcé pour éviter le blanc sur blanc */
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    padding: 8px;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.9rem;
+    cursor: pointer;
+    outline: none;
+    appearance: none;
+    /* Ajouté pour compatibilité */
+    -webkit-appearance: none;
+}
+
+.neon-select option {
+    background: #0f172a;
+    color: white;
+}
+
+.neon-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+}
+
+/* Switch (Toggle) */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 22px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider.round {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.1);
+    transition: .4s;
+    border-radius: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.slider.round:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 4px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider.round {
+    background-color: rgba(0, 255, 204, 0.2);
+    border-color: var(--accent);
+}
+
+input:checked+.slider.round:before {
+    transform: translateX(21px);
+    background-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
 }
