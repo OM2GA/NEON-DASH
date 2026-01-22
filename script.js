@@ -73,7 +73,7 @@ let peer = null;
 let conn = null; // Connexion unique si on est client
 let connections = []; // Liste des connexions si on est host
 let isHost = false;
-let players = {}; // Contient les positions et états des joueurs {id: {x, y, pseudo, color, isAlive, isReady}}
+let players = {}; // {id: {x, y, pseudo, color, isAlive, isReady, shape, partColor, trail: []}}
 let isReady = false;
 let isSpectating = false;
 let spectatedPlayerId = null;
@@ -453,6 +453,19 @@ function setupConnHandlers(c) {
         if (!isHost) {
             document.getElementById('lobbyInfo').style.display = 'block';
         }
+
+        // Envoi immédiat des infos d'identité
+        const idData = {
+            type: 'identity',
+            id: peer.id,
+            pseudo: document.getElementById('playerName').value || "Anonyme",
+            shape: activeParticle,
+            color: customColors[activePlayerColor].value || currentTheme.player,
+            partColor: customColors[activeParticleColor].value || currentTheme.player,
+            isReady: isReady
+        };
+        c.send(idData);
+
         updateLobbyUI();
     });
 
@@ -460,14 +473,46 @@ function setupConnHandlers(c) {
         if (data.type === 'init-game') {
             startGame(data.theme);
         }
+        if (data.type === 'identity') {
+            players[data.id] = {
+                ...players[data.id],
+                pseudo: data.pseudo,
+                shape: data.shape,
+                color: data.color,
+                partColor: data.partColor,
+                isReady: data.isReady,
+                trail: []
+            };
+            updateLobbyUI();
+        }
         if (data.type === 'sync') {
-            players[data.id] = data; // On stocke les positions et états reçus
-            updateLobbyUI(); // Pour mettre à jour la liste des statuts
+            if (!players[data.id]) players[data.id] = { trail: [] };
+            Object.assign(players[data.id], data);
+
+            // On gère un petit trail local pour les autres joueurs
+            if (!players[data.id].trail) players[data.id].trail = [];
+            players[data.id].trail.unshift({ x: CONFIG.playerX, y: data.y });
+            if (players[data.id].trail.length > CONFIG.trailMax) players[data.id].trail.pop();
+
+            // Création de particules pour les autres joueurs (visuel local)
+            if (gameActive && data.isAlive && Math.random() > 0.5) {
+                createParticle(CONFIG.playerX, data.y + CONFIG.playerSize / 2, -Math.random() * 2 - 1, (Math.random() - 0.5) * 2, data.partColor || data.color, Math.random() * 4 + 1);
+            }
         }
         if (data.type === 'ready-status') {
             if (players[data.id]) {
                 players[data.id].isReady = data.isReady;
                 updateLobbyUI();
+            }
+        }
+        if (data.type === 'obstacle-spawn') {
+            if (!isHost) {
+                obstacles.push(data.obstacle);
+            }
+        }
+        if (data.type === 'speed-sync') {
+            if (!isHost) {
+                gameSpeed = data.speed;
             }
         }
     });
@@ -605,15 +650,26 @@ function update(dt) {
             pseudo: document.getElementById('playerName').value || "Anonyme",
             shape: activeParticle,
             color: customColors[activePlayerColor].value || currentTheme.player,
+            partColor: customColors[activeParticleColor].value || currentTheme.player,
             isAlive: gameActive && !isSpectating
         };
 
         if (isHost) {
             connections.forEach(c => c.send(myData));
+
+            // Sync de la vitesse par l'hôte occasionnellement
+            if (Math.floor(score) % 50 === 0) {
+                connections.forEach(c => {
+                    if (c.open) c.send({ type: 'speed-sync', speed: gameSpeed });
+                });
+            }
         } else if (conn) {
             conn.send(myData);
         }
     }
+
+    if (shakeAmount > 0) shakeAmount *= 0.9;
+    if (shakeAmount < 0.1) shakeAmount = 0;
 
     if (isSpectating) {
         // En mode spectateur, on ne gère que les éléments visuels
@@ -640,12 +696,16 @@ function update(dt) {
             if (p.life <= 0) particles.splice(i, 1);
         }
 
-        lastObstacleTime += dt;
-        if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
-            const isTop = Math.random() > 0.5;
-            const h = 60 + Math.random() * 120;
-            obstacles.push({ x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h });
-            lastObstacleTime = 0;
+        // En mode multi, les obstacles sont reçus de l'hôte
+        // En mode solo, on les génère localement (mais isSpectating est normalement false en solo)
+        if (!peer || (!conn && connections.length === 0)) {
+            lastObstacleTime += dt;
+            if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
+                const isTop = Math.random() > 0.5;
+                const h = 60 + Math.random() * 120;
+                obstacles.push({ x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h });
+                lastObstacleTime = 0;
+            }
         }
 
         lastCoinTime += dt;
@@ -655,7 +715,6 @@ function update(dt) {
     }
 
     if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
-    if (shakeAmount > 0) shakeAmount *= 0.9;
 
     backgroundLayers.forEach(layer => layer.forEach(s => {
         s.x -= gameSpeed * s.speed * factor;
@@ -687,10 +746,21 @@ function update(dt) {
 
     lastObstacleTime += dt;
     if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
-        const isTop = Math.random() > 0.5;
-        const h = 60 + Math.random() * 120;
-        obstacles.push({ x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h });
-        lastObstacleTime = 0;
+        // Seul le Host génère les obstacles en multi
+        if (isHost || !peer || (!conn && connections.length === 0)) {
+            const isTop = Math.random() > 0.5;
+            const h = 60 + Math.random() * 120;
+            const newObs = { x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h };
+            obstacles.push(newObs);
+            lastObstacleTime = 0;
+
+            // Broadcast de l'obstacle si on est Host
+            if (isHost && connections.length > 0) {
+                connections.forEach(c => {
+                    if (c.open) c.send({ type: 'obstacle-spawn', obstacle: newObs });
+                });
+            }
+        }
     }
 
     obstacles.forEach((o, i) => {
@@ -726,17 +796,28 @@ function draw() {
     Object.keys(players).forEach(id => {
         const p = players[id];
         if (id !== peer?.id) {
+            const otherStyle = particleStyles[p.shape] || particleStyles.square;
+            const otherColor = p.color || "white";
+
+            // Dessiner le trail de l'autre joueur
+            if (p.trail) {
+                p.trail.forEach((pos, index) => {
+                    ctx.save();
+                    ctx.globalAlpha = ((CONFIG.trailMax - index) / CONFIG.trailMax) * 0.2;
+                    ctx.fillStyle = otherColor;
+                    ctx.translate(pos.x + CONFIG.playerSize / 2, pos.y + CONFIG.playerSize / 2);
+                    otherStyle.draw(ctx, 0, 0, CONFIG.playerSize);
+                    ctx.restore();
+                });
+            }
+
             ctx.save();
             ctx.globalAlpha = 0.7;
-            ctx.fillStyle = p.color;
+            ctx.fillStyle = otherColor;
             ctx.shadowBlur = 10;
-            ctx.shadowColor = p.color;
-
-            // Utiliser la forme (shape) choisie par l'autre joueur
-            const otherStyle = particleStyles[p.shape] || particleStyles.square;
+            ctx.shadowColor = otherColor;
 
             ctx.translate(CONFIG.playerX + CONFIG.playerSize / 2, p.y + CONFIG.playerSize / 2);
-            // On peut ajouter la rotation ici si on l'envoie dans myData
             otherStyle.draw(ctx, 0, 0, CONFIG.playerSize);
 
             ctx.restore();
@@ -905,9 +986,13 @@ function confirmDeath() {
     earnedNéonsElement.innerText = `+${currentSessionNéons}`;
     finalScoreElement.innerHTML = `<span style="color: ${currentTheme.player}">${currentTheme.name}</span><br>SCORE: ${Math.floor(score)}<br><span style="font-size: 0.8em; color: #ffd700;">RECORD: ${best}</span>`;
 
-    // Si on est en multi, on peut spectate
+    // Si on est en multi, passage automatique en mode spectateur après un court délai
     if (peer && (conn || connections.length > 0)) {
-        document.getElementById('spectateBtn').style.display = 'block';
+        setTimeout(() => {
+            if (!gameActive && !isSpectating) {
+                startSpectating();
+            }
+        }, 3000); // 3 secondes pour voir ses points gagnés
     }
 
     updateNéonUI();
