@@ -645,12 +645,9 @@ function startMultiGame() {
 // -----------------------------
 
 function update(dt) {
-    if (!gameActive) return;
     const factor = dt / 16.67;
-    score += factor;
-    scoreElement.innerText = `Score: ${Math.floor(score)}`;
 
-    // Sync réseau
+    // Sync réseau - Déplacé avant le check gameActive pour envoyer les etats de mort
     if (peer && (conn || connections.length > 0)) {
         const myData = {
             type: 'sync',
@@ -667,7 +664,7 @@ function update(dt) {
             connections.forEach(c => c.send(myData));
 
             // Sync de la vitesse par l'hôte occasionnellement
-            if (Math.floor(score) % 50 === 0) {
+            if (gameActive && Math.floor(score) % 50 === 0) {
                 connections.forEach(c => {
                     if (c.open) c.send({ type: 'speed-sync', speed: gameSpeed });
                 });
@@ -676,6 +673,10 @@ function update(dt) {
             conn.send(myData);
         }
     }
+
+    if (!gameActive) return;
+    score += factor;
+    scoreElement.innerText = `Score: ${Math.floor(score)}`;
 
     if (shakeAmount > 0) shakeAmount *= 0.9;
     if (shakeAmount < 0.1) shakeAmount = 0;
@@ -870,17 +871,16 @@ function draw() {
     });
     ctx.globalAlpha = 1;
 
-    style.draw(ctx, 0, 0, player.size);
-    ctx.restore();
-
-    ctx.save();
-    ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
-    currentRotation += (targetRotation - currentRotation) * 0.15;
-    ctx.rotate(currentRotation);
-    ctx.shadowBlur = 15; ctx.shadowColor = pColor; ctx.fillStyle = pColor;
-    if (isSpectating) ctx.globalAlpha = 0; // Masquer complètement si spectateur
-    if (ctx.globalAlpha > 0) style.draw(ctx, 0, 0, player.size);
-    ctx.restore();
+    // Joueur local
+    if (!isSpectating && gameActive) {
+        ctx.save();
+        ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
+        currentRotation += (targetRotation - currentRotation) * 0.15;
+        ctx.rotate(currentRotation);
+        ctx.shadowBlur = 15; ctx.shadowColor = pColor; ctx.fillStyle = pColor;
+        style.draw(ctx, 0, 0, player.size);
+        ctx.restore();
+    }
 
     if (isSpectating) {
         ctx.fillStyle = "white";
@@ -927,6 +927,22 @@ function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling =
 function endGame() {
     gameActive = false;
     shakeAmount = 20;
+
+    // Force sync immédiat pour informer les autres de la mort
+    if (peer && (conn || connections.length > 0)) {
+        const myData = {
+            type: 'sync',
+            id: peer.id,
+            y: player.y,
+            pseudo: document.getElementById('playerName').value || "Anonyme",
+            shape: activeParticle,
+            color: customColors[activePlayerColor].value || currentTheme.player,
+            partColor: customColors[activeParticleColor].value || currentTheme.player,
+            isAlive: false
+        };
+        if (isHost) connections.forEach(c => c.send(myData));
+        else if (conn) conn.send(myData);
+    }
 
     // Calculer le coût de revive
     reviveCost = 10 + (revivesInSession * 15);
@@ -1016,6 +1032,11 @@ document.getElementById('playerName').addEventListener('change', (e) => {
 });
 
 function startSpectating() {
+    // Si on est déjà revenu au menu ou si on n'est plus en multi, on ne fait rien
+    const currentScreen = document.querySelector('.screen.active')?.id;
+    if (currentScreen !== 'gameOver' && currentScreen !== 'deathScreen') return;
+    if (!peer || (!conn && connections.length === 0)) return;
+
     isSpectating = true;
     showScreen('gameUI');
     gameActive = true;
@@ -1033,23 +1054,26 @@ function backToMenu() {
 function checkAutoReturnToLobby() {
     if (!peer || (!conn && connections.length === 0)) return;
 
-    // Seul l'hôte décide du retour pour tout le monde
+    // Seul l'hôte décide du retour
     if (isHost) {
-        const anyAliveLocal = gameActive && !isSpectating;
-        const anyAliveRemote = Object.keys(players).some(id => players[id].isAlive === true || players[id].isAlive === "true");
+        // Un joueur est en vie s'il n'est pas spectateur ET que la partie est active
+        const localAlive = gameActive && !isSpectating;
+        const othersAlive = Object.keys(players).some(id => players[id].isAlive === true || players[id].isAlive === "true");
 
-        if (!anyAliveLocal && !anyAliveRemote) {
-            // On attend un peu pour laisser voir le game over
+        if (!localAlive && !othersAlive) {
+            console.log("Tout le monde est mort, retour au lobby...");
             setTimeout(() => {
-                // On revérifie au cas où
-                const stillNoneAlive = !gameActive && Object.keys(players).every(id => players[id].isAlive === false || players[id].isAlive === "false");
+                // On revérifie au cas où quelqu'un a utilisé un revive entre temps
+                const stillNoneAlive = (!gameActive || isSpectating) &&
+                    Object.keys(players).every(id => players[id].isAlive === false || players[id].isAlive === "false");
+
                 if (stillNoneAlive) {
                     connections.forEach(c => {
                         if (c.open) c.send({ type: 'back-to-lobby' });
                     });
                     returnToLobby();
                 }
-            }, 2000);
+            }, 3000); // Délai un peu plus long pour laisser voir les scores de tout le monde
         }
     }
 }
