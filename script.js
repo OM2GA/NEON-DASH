@@ -462,7 +462,8 @@ function setupConnHandlers(c) {
             shape: activeParticle,
             color: customColors[activePlayerColor].value || currentTheme.player,
             partColor: customColors[activeParticleColor].value || currentTheme.player,
-            isReady: isReady
+            isReady: isReady,
+            isAlive: true
         };
         c.send(idData);
 
@@ -490,14 +491,22 @@ function setupConnHandlers(c) {
             Object.assign(players[data.id], data);
 
             // On gère un petit trail local pour les autres joueurs
-            if (!players[data.id].trail) players[data.id].trail = [];
-            players[data.id].trail.unshift({ x: CONFIG.playerX, y: data.y });
-            if (players[data.id].trail.length > CONFIG.trailMax) players[data.id].trail.pop();
+            if (data.isAlive !== false) {
+                if (!players[data.id].trail) players[data.id].trail = [];
+                players[data.id].trail.unshift({ x: CONFIG.playerX, y: data.y });
+                if (players[data.id].trail.length > CONFIG.trailMax) players[data.id].trail.pop();
 
-            // Création de particules pour les autres joueurs (visuel local)
-            if (gameActive && data.isAlive && Math.random() > 0.5) {
-                createParticle(CONFIG.playerX, data.y + CONFIG.playerSize / 2, -Math.random() * 2 - 1, (Math.random() - 0.5) * 2, data.partColor || data.color, Math.random() * 4 + 1);
+                // Création de particules pour les autres joueurs (visuel local)
+                if (gameActive && Math.random() > 0.5) {
+                    createParticle(CONFIG.playerX, data.y + CONFIG.playerSize / 2, -Math.random() * 2 - 1, (Math.random() - 0.5) * 2, data.partColor || data.color, Math.random() * 4 + 1);
+                }
+            } else if (isHost) {
+                // Si quelqu'un est mort, l'hôte vérifie si tout le monde est mort pour rentrer au salon
+                checkAutoReturnToLobby();
             }
+        }
+        if (data.type === 'back-to-lobby') {
+            returnToLobby();
         }
         if (data.type === 'ready-status') {
             if (players[data.id]) {
@@ -795,7 +804,7 @@ function draw() {
     // Dessiner les autres joueurs
     Object.keys(players).forEach(id => {
         const p = players[id];
-        if (id !== peer?.id) {
+        if (id !== peer?.id && p.isAlive !== false && p.isAlive !== "false") {
             const otherStyle = particleStyles[p.shape] || particleStyles.square;
             const otherColor = p.color || "white";
 
@@ -823,10 +832,10 @@ function draw() {
             ctx.restore();
 
             // Pseudo
-            ctx.fillStyle = (p.isAlive === false || p.isAlive === "false") ? "rgba(255,255,255,0.4)" : "white";
+            ctx.fillStyle = "white";
             ctx.font = "bold 12px Rajdhani";
             ctx.textAlign = "center";
-            ctx.fillText(p.pseudo + ((p.isAlive === false || p.isAlive === "false") ? " (MORT)" : ""), CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
+            ctx.fillText(p.pseudo, CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
         }
     });
 
@@ -861,13 +870,16 @@ function draw() {
     });
     ctx.globalAlpha = 1;
 
+    style.draw(ctx, 0, 0, player.size);
+    ctx.restore();
+
     ctx.save();
     ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
     currentRotation += (targetRotation - currentRotation) * 0.15;
     ctx.rotate(currentRotation);
     ctx.shadowBlur = 15; ctx.shadowColor = pColor; ctx.fillStyle = pColor;
-    if (isSpectating) ctx.globalAlpha = 0.3;
-    style.draw(ctx, 0, 0, player.size);
+    if (isSpectating) ctx.globalAlpha = 0; // Masquer complètement si spectateur
+    if (ctx.globalAlpha > 0) style.draw(ctx, 0, 0, player.size);
     ctx.restore();
 
     if (isSpectating) {
@@ -1021,17 +1033,25 @@ function backToMenu() {
 function checkAutoReturnToLobby() {
     if (!peer || (!conn && connections.length === 0)) return;
 
-    // On attend un peu pour laisser voir le game over
-    setTimeout(() => {
-        const allDead = !gameActive && (isSpectating || !gameActive) &&
-            Object.keys(players).every(id => players[id].isAlive === false);
+    // Seul l'hôte décide du retour pour tout le monde
+    if (isHost) {
+        const anyAliveLocal = gameActive && !isSpectating;
+        const anyAliveRemote = Object.keys(players).some(id => players[id].isAlive === true || players[id].isAlive === "true");
 
-        // Version simplifiée : si on est là, c'est qu'on est mort. 
-        // Si tous les autres joueurs enregistrés sont aussi morts, on rentre tous.
-        if (allDead) {
-            returnToLobby();
+        if (!anyAliveLocal && !anyAliveRemote) {
+            // On attend un peu pour laisser voir le game over
+            setTimeout(() => {
+                // On revérifie au cas où
+                const stillNoneAlive = !gameActive && Object.keys(players).every(id => players[id].isAlive === false || players[id].isAlive === "false");
+                if (stillNoneAlive) {
+                    connections.forEach(c => {
+                        if (c.open) c.send({ type: 'back-to-lobby' });
+                    });
+                    returnToLobby();
+                }
+            }, 2000);
         }
-    }, 2000);
+    }
 }
 
 function returnToLobby() {
