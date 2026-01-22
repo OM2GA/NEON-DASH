@@ -351,6 +351,12 @@ function createCoin() {
 // --- LOGIQUE MULTIJOUEUR ---
 function openMultiMenu() {
     showScreen('multiMenu');
+    // On initialise un Peer par défaut si ce n'est pas déjà fait 
+    // pour permettre de rejoindre immédiatement
+    if (!peer) {
+        const randomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+        initializePeer("ND-" + randomId, false); // false = don't set isHost yet
+    }
 }
 
 function generateRandomHostCode() {
@@ -378,27 +384,36 @@ function hostGame() {
     }
 }
 
-function initializePeer(id) {
+function initializePeer(id, setHost = true) {
+    if (peer) {
+        peer.destroy();
+    }
+
     peer = new Peer(id);
 
     peer.on('open', (openedId) => {
-        document.getElementById('groupCodeDisplay').innerText = "Code du groupe : " + openedId.replace("ND-", "");
-        isHost = true;
-        connections = [];
-        players = {};
-        isReady = false;
+        if (setHost) {
+            document.getElementById('groupCodeDisplay').innerText = "Code du groupe : " + openedId.replace("ND-", "");
+            isHost = true;
+            connections = [];
+            players = {};
+            isReady = false;
+        } else {
+            document.getElementById('groupCodeDisplay').innerText = "";
+        }
         updateLobbyUI();
     });
 
     peer.on('connection', (c) => {
         setupConnHandlers(c);
         if (!connections.includes(c)) connections.push(c);
+        isHost = true; // Si on reçoit une connexion, on devient l'hôte
         updateLobbyUI();
     });
 
     peer.on('error', (err) => {
         if (err.type === 'unavailable-id') {
-            alert("Ce code est déjà utilisé. Choisis-en un autre ou génère un code aléatoire.");
+            if (setHost) alert("Ce code est déjà utilisé. Choisis-en un autre ou génère un code aléatoire.");
         } else {
             console.error("PeerJS Error:", err);
         }
@@ -406,9 +421,30 @@ function initializePeer(id) {
 }
 
 function joinGame() {
-    const code = document.getElementById('joinCode').value.toUpperCase();
-    if (!code) return;
+    const code = document.getElementById('joinCode').value.trim().toUpperCase();
+    if (!code) {
+        alert("Entre le code du groupe !");
+        return;
+    }
+
+    if (!peer || peer.destroyed) {
+        const randomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+        initializePeer("ND-" + randomId, false);
+        // On doit attendre que le peer soit ouvert avant de connecter
+        peer.on('open', () => {
+            performConnect(code);
+        });
+    } else {
+        performConnect(code);
+    }
+}
+
+function performConnect(code) {
+    isHost = false;
     conn = peer.connect("ND-" + code);
+    connections = [];
+    players = {};
+    isReady = false;
     setupConnHandlers(conn);
 }
 
@@ -416,7 +452,6 @@ function setupConnHandlers(c) {
     c.on('open', () => {
         if (!isHost) {
             document.getElementById('lobbyInfo').style.display = 'block';
-            document.getElementById('startMultiBtn').style.display = 'none';
         }
         updateLobbyUI();
     });
