@@ -20,6 +20,8 @@
             <div class="stats-bar">
                 <div id="totalNéonsMenu">Néons: 0</div>
             </div>
+            <input type="text" id="playerName" placeholder="Ton Pseudo" class="multi-input"
+                style="max-width: 300px; margin: 0 auto 20px auto; display: block;">
             <div class="menu-actions">
                 <div class="level-select">
                     <button class="btn-level" onclick="startGame('neon')" aria-label="Démarrer le mode Cyber Neon">
@@ -63,7 +65,6 @@
         <!-- Menu Multijoueur -->
         <section id="multiMenu" class="shop">
             <h2>MULTIVERSUM</h2>
-            <input type="text" id="playerName" placeholder="Ton Pseudo" class="multi-input">
 
             <div class="multi-actions">
                 <div class="host-side">
@@ -77,9 +78,23 @@
                 </div>
             </div>
             <div id="lobbyInfo" style="margin-top: 20px; display:none;">
-                <p>Joueurs connectés : <span id="playerCount">1</span></p>
-                <button id="startMultiBtn" onclick="startMultiGame()" class="btn-level"
-                    style="display:none; margin-top:10px;">LANCER LA PARTIE</button>
+                <p style="color: #00ffcc; font-weight: bold;">Joueurs : <span id="playerCount">1</span></p>
+
+                <div id="hostControls"
+                    style="display:none; margin-top:15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:15px;">
+                    <p style="font-size: 0.8rem; margin-bottom: 10px;">CHOISIR LA DESTINATION :</p>
+                    <div class="level-select">
+                        <button class="btn-level" onclick="broadcastStart('neon')"
+                            style="padding: 10px; font-size: 0.7rem;">NEON</button>
+                        <button class="btn-level" onclick="broadcastStart('lava')"
+                            style="padding: 10px; font-size: 0.7rem;">LAVA</button>
+                        <button class="btn-level" onclick="broadcastStart('ice')"
+                            style="padding: 10px; font-size: 0.7rem;">ICE</button>
+                    </div>
+                </div>
+
+                <p id="waitMessage" style="display:none; font-style: italic; font-size: 0.9rem; margin-top: 10px;">En
+                    attente du chef de groupe...</p>
             </div>
             <button onclick="showScreen('menu')" class="btn-skip">RETOUR</button>
         </section>

@@ -75,6 +75,14 @@ let connections = []; // Liste des connexions si on est host
 let isHost = false;
 let players = {}; // Contient les positions des autres joueurs
 
+// Chargement du pseudo au démarrage
+window.addEventListener('DOMContentLoaded', () => {
+    const savedPseudo = localStorage.getItem('playerPseudo');
+    if (savedPseudo) {
+        document.getElementById('playerName').value = savedPseudo;
+    }
+});
+
 // Système de Redimensionnement Responsive
 function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -312,6 +320,15 @@ function createCoin() {
 
 // --- LOGIQUE MULTIJOUEUR ---
 function openMultiMenu() {
+    const pseudo = document.getElementById('playerName').value.trim();
+    if (!pseudo) {
+        alert("Entre un pseudo dans le menu principal avant d'accéder au Multiversum !");
+        return;
+    }
+
+    // Sauvegarder le pseudo
+    localStorage.setItem('playerPseudo', pseudo);
+
     showScreen('multiMenu');
     if (!peer) {
         // Création d'un ID aléatoire court pour le code
@@ -319,15 +336,14 @@ function openMultiMenu() {
         peer = new Peer("ND-" + randomId);
 
         peer.on('open', (id) => {
-            document.getElementById('groupCodeDisplay').innerText = "Ton Code : " + id.replace("ND-", "");
+            document.getElementById('groupCodeDisplay').innerText = "Code du groupe : " + id.replace("ND-", "");
         });
 
         peer.on('connection', (c) => {
-            connections.push(c);
             setupConnHandlers(c);
+            // Si on reçoit une connexion, on est forcément le Host
+            if (!connections.includes(c)) connections.push(c);
             isHost = true;
-            document.getElementById('lobbyInfo').style.display = 'block';
-            document.getElementById('startMultiBtn').style.display = 'block';
             updateLobbyUI();
         });
     }
@@ -375,12 +391,36 @@ function setupConnHandlers(c) {
 function updateLobbyUI() {
     const count = isHost ? connections.length + 1 : (conn ? 2 : 1);
     document.getElementById('playerCount').innerText = count;
+    document.getElementById('lobbyInfo').style.display = 'block';
+
+    if (isHost) {
+        document.getElementById('hostControls').style.display = 'block';
+        document.getElementById('waitMessage').style.display = 'none';
+    } else {
+        document.getElementById('hostControls').style.display = 'none';
+        document.getElementById('waitMessage').style.display = 'block';
+    }
 }
 
+function broadcastStart(themeKey) {
+    if (!isHost) return;
+
+    // 1. Envoyer l'ordre de départ à tous les connectés
+    const startData = {
+        type: 'init-game',
+        theme: themeKey
+    };
+
+    connections.forEach(c => {
+        if (c.open) c.send(startData);
+    });
+
+    // 2. Lancer sa propre partie
+    startGame(themeKey);
+}
 function startMultiGame() {
-    const theme = 'neon'; // On peut choisir le thème par défaut ou laisser le host choisir
-    connections.forEach(c => c.send({ type: 'init-game', theme: theme }));
-    startGame(theme);
+    // Cette fonction est remplacée par broadcastStart mais on la garde pour assurer la compatibilité si appelée ailleurs
+    broadcastStart('neon');
 }
 // -----------------------------
 
@@ -475,17 +515,25 @@ function draw() {
         const p = players[id];
         if (id !== peer?.id) {
             ctx.save();
-            ctx.globalAlpha = 0.6; // Un peu transparent
+            ctx.globalAlpha = 0.7;
             ctx.fillStyle = p.color;
-            // On dessine une forme simple pour les autres
-            ctx.fillRect(CONFIG.playerX, p.y, CONFIG.playerSize, CONFIG.playerSize);
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = p.color;
 
-            ctx.globalAlpha = 1.0;
-            ctx.fillStyle = "white";
-            ctx.font = "10px Orbitron";
-            ctx.textAlign = "center";
-            ctx.fillText(p.pseudo, CONFIG.playerX + CONFIG.playerSize / 2, p.y - 10);
+            // Utiliser la forme (shape) choisie par l'autre joueur
+            const otherStyle = particleStyles[p.shape] || particleStyles.square;
+
+            ctx.translate(CONFIG.playerX + CONFIG.playerSize / 2, p.y + CONFIG.playerSize / 2);
+            // On peut ajouter la rotation ici si on l'envoie dans myData
+            otherStyle.draw(ctx, 0, 0, CONFIG.playerSize);
+
             ctx.restore();
+
+            // Pseudo
+            ctx.fillStyle = "white";
+            ctx.font = "bold 12px Rajdhani";
+            ctx.textAlign = "center";
+            ctx.fillText(p.pseudo, CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
         }
     });
 
