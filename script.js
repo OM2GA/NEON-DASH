@@ -169,7 +169,7 @@ const customColors = {
 
 const player = { x: CONFIG.playerX, y: 200, size: CONFIG.playerSize, velocity: 0, onCeiling: false };
 
-function startGame(themeKey) {
+function startGame(themeKey, isMulti = false) {
     activeThemeKey = themeKey;
     currentTheme = themes[themeKey];
     showScreen('gameUI');
@@ -179,6 +179,16 @@ function startGame(themeKey) {
     isSpectating = false;
     spectatedPlayerId = null;
     document.getElementById('spectateBtn').style.display = 'none';
+
+    // Si on lance en solo alors qu'on était en multi, on coupe les ponts pour éviter les interférences
+    if (!isMulti && peer && (conn || connections.length > 0)) {
+        console.log("Démarrage Solo : Nettoyage multijoueur...");
+        if (conn) { conn.close(); conn = null; }
+        connections.forEach(c => c.close());
+        connections = [];
+        players = {};
+        updateLobbyUI();
+    }
 
     resetStats();
     initBackground();
@@ -472,7 +482,7 @@ function setupConnHandlers(c) {
 
     c.on('data', (data) => {
         if (data.type === 'init-game') {
-            startGame(data.theme);
+            startGame(data.theme, true); // true = Multi
         }
         if (data.type === 'identity') {
             players[data.id] = {
@@ -636,7 +646,7 @@ function broadcastStart(themeKey) {
     });
 
     // 2. Lancer sa propre partie
-    startGame(themeKey);
+    startGame(themeKey, true); // true = Multi
 }
 function startMultiGame() {
     // Cette fonction est remplacée par broadcastStart mais on la garde pour assurer la compatibilité si appelée ailleurs
@@ -805,7 +815,8 @@ function draw() {
     // Dessiner les autres joueurs
     Object.keys(players).forEach(id => {
         const p = players[id];
-        if (id !== peer?.id && p.isAlive !== false && p.isAlive !== "false") {
+        // On vérifie strictement que le joueur est en vie et que son y est défini
+        if (id !== peer?.id && (p.isAlive === true || p.isAlive === "true") && typeof p.y === 'number') {
             const otherStyle = particleStyles[p.shape] || particleStyles.square;
             const otherColor = p.color || "white";
 
@@ -1089,6 +1100,33 @@ function returnToLobby() {
     }
 
     showScreen('multiMenu');
+    updateLobbyUI();
+}
+
+function quitLobby() {
+    if (conn) {
+        conn.close();
+        conn = null;
+    }
+    if (isHost) {
+        connections.forEach(c => c.close());
+        connections = [];
+    }
+    players = {};
+    isHost = false;
+    isReady = false;
+
+    // Reset UI
+    document.getElementById('lobbyInfo').style.display = 'none';
+    document.getElementById('groupCodeDisplay').innerText = "";
+    document.getElementById('readyBtn').innerText = "PAS PRÊT";
+    document.getElementById('readyBtn').classList.remove('active');
+
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+
     updateLobbyUI();
 }
 updateNéonUI();

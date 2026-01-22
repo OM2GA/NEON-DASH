@@ -92,7 +92,11 @@
                     <hr style="margin: 10px 0; opacity: 0.1;">
                     <div class="lobby-header">
                         <p>Joueurs : <span id="playerCount">1</span></p>
-                        <button id="readyBtn" onclick="toggleReady()" class="btn-ready">PAS PRÊT</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="readyBtn" onclick="toggleReady()" class="btn-ready">PAS PRÊT</button>
+                            <button onclick="quitLobby()" class="btn-ready"
+                                style="background: rgba(255, 0, 85, 0.1); border-color: #ff0055; color: #ff0055;">QUITTER</button>
+                        </div>
                     </div>
 
                     <div id="playerStatusList" class="status-list">
