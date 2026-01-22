@@ -73,7 +73,8 @@ let peer = null;
 let conn = null; // Connexion unique si on est client
 let connections = []; // Liste des connexions si on est host
 let isHost = false;
-let players = {}; // Contient les positions des autres joueurs
+let players = {}; // Contient les positions et états des joueurs {id: {x, y, pseudo, color, isAlive, isReady}}
+let isReady = false;
 let isSpectating = false;
 let spectatedPlayerId = null;
 
@@ -91,16 +92,34 @@ function resize() {
     const width = window.innerWidth;
     const height = window.innerHeight;
 
-    // On garde le ratio basé sur la hauteur de base (400px)
-    scaleFactor = height / CONFIG.baseHeight;
-    const virtualWidth = width / scaleFactor;
+    // On fixe la résolution virtuelle à 800x400 pour garantir l'équité (Multiplayer Safe)
+    const virtualWidth = 800;
+    const virtualHeight = 400;
+    const targetAspect = virtualWidth / virtualHeight;
+    const currentAspect = width / height;
+
+    // On calcule le scaleFactor pour que le rectangle 800x400 rentre dans l'écran
+    if (currentAspect > targetAspect) {
+        scaleFactor = height / virtualHeight;
+    } else {
+        scaleFactor = width / virtualWidth;
+    }
 
     canvas.width = width * dpr;
     canvas.height = height * dpr;
-    ctx.scale(dpr * scaleFactor, dpr * scaleFactor);
 
-    // Update CONFIG baseWidth pour que les obstacles apparaissent au bon endroit
+    // Centrage du canvas : on calcule les offsets
+    const offsetX = (width - (virtualWidth * scaleFactor)) / 2;
+    const offsetY = (height - (virtualHeight * scaleFactor)) / 2;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset
+    ctx.scale(dpr, dpr);
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scaleFactor, scaleFactor);
+
+    // On garde les dimensions de base fixes pour le moteur de jeu
     CONFIG.baseWidth = virtualWidth;
+    CONFIG.baseHeight = virtualHeight;
 }
 
 window.addEventListener('resize', resize);
@@ -199,9 +218,14 @@ function initBackground() {
     backgroundLayers = [];
     for (let i = 0; i < 3; i++) {
         let stars = [];
-        const count = 20 + i * 15;
+        const count = 30 + i * 20; // Plus d'étoiles pour l'immersion
         for (let j = 0; j < count; j++) {
-            stars.push({ x: Math.random() * CONFIG.baseWidth, y: Math.random() * CONFIG.baseHeight, size: (i + 1) * 1.5, speed: (i + 1) * 0.15 });
+            stars.push({
+                x: Math.random() * CONFIG.baseWidth,
+                y: Math.random() * CONFIG.baseHeight,
+                size: (i + 1) * 1.5,
+                speed: (i + 1) * 0.15
+            });
         }
         backgroundLayers.push(stars);
     }
@@ -326,37 +350,59 @@ function createCoin() {
 
 // --- LOGIQUE MULTIJOUEUR ---
 function openMultiMenu() {
-    const pseudo = document.getElementById('playerName').value.trim();
-    if (!pseudo) {
-        alert("Entre un pseudo dans le menu principal avant d'accéder au Multiversum !");
-        return;
-    }
-
-    // Sauvegarder le pseudo
-    localStorage.setItem('playerPseudo', pseudo);
-
     showScreen('multiMenu');
-    if (!peer) {
-        // Création d'un ID aléatoire court pour le code
-        const randomId = Math.random().toString(36).substring(2, 7).toUpperCase();
-        peer = new Peer("ND-" + randomId);
+}
 
-        peer.on('open', (id) => {
-            document.getElementById('groupCodeDisplay').innerText = "Code du groupe : " + id.replace("ND-", "");
-        });
-
-        peer.on('connection', (c) => {
-            setupConnHandlers(c);
-            // Si on reçoit une connexion, on est forcément le Host
-            if (!connections.includes(c)) connections.push(c);
-            isHost = true;
-            updateLobbyUI();
-        });
+function generateRandomHostCode() {
+    if (peer) {
+        peer.destroy();
+        peer = null;
     }
+
+    const randomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+    initializePeer("ND-" + randomId);
 }
 
 function hostGame() {
-    alert("Attends que tes amis rejoignent avec le code affiché !");
+    const manualCode = document.getElementById('joinCode').value.trim().toUpperCase();
+    if (peer) {
+        peer.destroy();
+        peer = null;
+    }
+
+    if (manualCode) {
+        initializePeer("ND-" + manualCode);
+    } else {
+        const randomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+        initializePeer("ND-" + randomId);
+    }
+}
+
+function initializePeer(id) {
+    peer = new Peer(id);
+
+    peer.on('open', (openedId) => {
+        document.getElementById('groupCodeDisplay').innerText = "Code du groupe : " + openedId.replace("ND-", "");
+        isHost = true;
+        connections = [];
+        players = {};
+        isReady = false;
+        updateLobbyUI();
+    });
+
+    peer.on('connection', (c) => {
+        setupConnHandlers(c);
+        if (!connections.includes(c)) connections.push(c);
+        updateLobbyUI();
+    });
+
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+            alert("Ce code est déjà utilisé. Choisis-en un autre ou génère un code aléatoire.");
+        } else {
+            console.error("PeerJS Error:", err);
+        }
+    });
 }
 
 function joinGame() {
@@ -380,7 +426,14 @@ function setupConnHandlers(c) {
             startGame(data.theme);
         }
         if (data.type === 'sync') {
-            players[data.id] = data; // On stocke les positions reçues
+            players[data.id] = data; // On stocke les positions et états reçus
+            updateLobbyUI(); // Pour mettre à jour la liste des statuts
+        }
+        if (data.type === 'ready-status') {
+            if (players[data.id]) {
+                players[data.id].isReady = data.isReady;
+                updateLobbyUI();
+            }
         }
     });
 
@@ -399,13 +452,85 @@ function updateLobbyUI() {
     document.getElementById('playerCount').innerText = count;
     document.getElementById('lobbyInfo').style.display = 'block';
 
+    // Mise à jour de la liste des statuts
+    const statusList = document.getElementById('playerStatusList');
+    statusList.innerHTML = '';
+
+    // Soi-même
+    addPlayerStatusItem(
+        document.getElementById('playerName').value || "Moi",
+        isReady,
+        statusList
+    );
+
+    // Les autres
+    Object.keys(players).forEach(id => {
+        addPlayerStatusItem(
+            players[id].pseudo || "Anonyme",
+            players[id].isReady,
+            statusList
+        );
+    });
+
+    const everyoneReady = checkEveryoneReady();
+
     if (isHost) {
         document.getElementById('hostControls').style.display = 'block';
         document.getElementById('waitMessage').style.display = 'none';
+
+        // Activer/Désactiver les boutons de lancement selon si tout le monde est prêt
+        const startButtons = document.querySelectorAll('#hostControls .btn-level-sm');
+        startButtons.forEach(btn => {
+            btn.disabled = !everyoneReady || connections.length === 0;
+            btn.style.opacity = btn.disabled ? "0.5" : "1";
+        });
     } else {
         document.getElementById('hostControls').style.display = 'none';
         document.getElementById('waitMessage').style.display = 'block';
+        document.getElementById('waitMessage').innerText = everyoneReady ? "Tout le monde est prêt ! Le chef va lancer..." : "En attente des autres joueurs...";
     }
+}
+
+function addPlayerStatusItem(pseudo, ready, container) {
+    const div = document.createElement('div');
+    div.className = 'player-status-item';
+    div.innerHTML = `
+        <span>${pseudo}</span>
+        <span class="status-indicator ${ready ? 'ready' : 'not-ready'}"></span>
+    `;
+    container.appendChild(div);
+}
+
+function toggleReady() {
+    isReady = !isReady;
+    const btn = document.getElementById('readyBtn');
+    btn.innerText = isReady ? "PRÊT" : "PAS PRÊT";
+    btn.classList.toggle('active', isReady);
+
+    // Envoyer son statut aux autres
+    const readyData = {
+        type: 'ready-status',
+        id: peer.id,
+        isReady: isReady
+    };
+
+    if (isHost) {
+        connections.forEach(c => c.open && c.send(readyData));
+    } else if (conn && conn.open) {
+        conn.send(readyData);
+    }
+
+    updateLobbyUI();
+}
+
+function checkEveryoneReady() {
+    if (!isReady) return false;
+
+    for (const id in players) {
+        if (!players[id].isReady) return false;
+    }
+
+    return true;
 }
 
 function broadcastStart(themeKey) {
@@ -457,7 +582,12 @@ function update(dt) {
 
     if (isSpectating) {
         // En mode spectateur, on ne gère que les éléments visuels
-        backgroundLayers.forEach(layer => layer.forEach(s => { s.x -= gameSpeed * s.speed * factor; if (s.x < -20) s.x = CONFIG.baseWidth + 20; }));
+        backgroundLayers.forEach(layer => layer.forEach(s => {
+            s.x -= gameSpeed * s.speed * factor;
+            if (s.x < -20) s.x = 800 + 20;
+            if (s.y < -20) s.y = 400 + 20; // Wrapping Y
+            if (s.y > 400 + 20) s.y = -20;
+        }));
 
         obstacles.forEach((o, i) => {
             o.x -= gameSpeed * factor;
@@ -479,7 +609,7 @@ function update(dt) {
         if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
             const isTop = Math.random() > 0.5;
             const h = 60 + Math.random() * 120;
-            obstacles.push({ x: CONFIG.baseWidth, y: isTop ? 0 : CONFIG.baseHeight - h, w: 35, h: h });
+            obstacles.push({ x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h });
             lastObstacleTime = 0;
         }
 
@@ -492,12 +622,17 @@ function update(dt) {
     if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
     if (shakeAmount > 0) shakeAmount *= 0.9;
 
-    backgroundLayers.forEach(layer => layer.forEach(s => { s.x -= gameSpeed * s.speed * factor; if (s.x < -20) s.x = CONFIG.baseWidth + 20; }));
+    backgroundLayers.forEach(layer => layer.forEach(s => {
+        s.x -= gameSpeed * s.speed * factor;
+        if (s.x < -20) s.x = 800 + 20;
+        if (s.y < -20) s.y = 400 + 20; // Wrapping Y
+        if (s.y > 400 + 20) s.y = -20;
+    }));
 
     player.velocity += (player.onCeiling ? -CONFIG.gravity : CONFIG.gravity) * factor;
     player.y += player.velocity * factor;
-    player.y = Math.max(0, Math.min(CONFIG.baseHeight - player.size, player.y));
-    if (player.y === 0 || player.y === CONFIG.baseHeight - player.size) player.velocity = 0;
+    player.y = Math.max(0, Math.min(400 - player.size, player.y));
+    if (player.y === 0 || player.y === 400 - player.size) player.velocity = 0;
 
     trail.unshift({ x: player.x, y: player.y, rotation: currentRotation });
     if (trail.length > CONFIG.trailMax) trail.pop();
@@ -519,7 +654,7 @@ function update(dt) {
     if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
         const isTop = Math.random() > 0.5;
         const h = 60 + Math.random() * 120;
-        obstacles.push({ x: CONFIG.baseWidth, y: isTop ? 0 : CONFIG.baseHeight - h, w: 35, h: h });
+        obstacles.push({ x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h });
         lastObstacleTime = 0;
     }
 
@@ -550,7 +685,7 @@ function checkCollision(p, o) {
 function draw() {
     ctx.save();
     if (shakeAmount > 0.1) ctx.translate((Math.random() - 0.5) * shakeAmount, (Math.random() - 0.5) * shakeAmount);
-    ctx.clearRect(-100, -100, CONFIG.baseWidth + 200, CONFIG.baseHeight + 200);
+    ctx.clearRect(-100, -100, 800 + 200, 400 + 200);
 
     // Dessiner les autres joueurs
     Object.keys(players).forEach(id => {
@@ -572,10 +707,10 @@ function draw() {
             ctx.restore();
 
             // Pseudo
-            ctx.fillStyle = p.isAlive === false ? "rgba(255,255,255,0.4)" : "white";
+            ctx.fillStyle = (p.isAlive === false || p.isAlive === "false") ? "rgba(255,255,255,0.4)" : "white";
             ctx.font = "bold 12px Rajdhani";
             ctx.textAlign = "center";
-            ctx.fillText(p.pseudo + (p.isAlive === false ? " (MORT)" : ""), CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
+            ctx.fillText(p.pseudo + ((p.isAlive === false || p.isAlive === "false") ? " (MORT)" : ""), CONFIG.playerX + CONFIG.playerSize / 2, p.y - 12);
         }
     });
 
@@ -585,7 +720,7 @@ function draw() {
         layer.forEach(s => {
             if (activeThemeKey === 'neon') ctx.fillRect(s.x, s.y, s.size, s.size);
             else if (activeThemeKey === 'lava') { ctx.beginPath(); ctx.arc(s.x, s.y, s.size / 2, 0, Math.PI * 2); ctx.fill(); }
-            else { ctx.beginPath(); ctx.moveTo(s.x, s.y - s.size); ctx.lineTo(s.x + s.size, s.y); ctx.lineTo(s.x, s.y + s.size); ctx.lineTo(s.x - s.size, s.y); ctx.closePath(); ctx.fill(); }
+            else { ctx.beginPath(); ctx.moveTo(s.x, s.y - s.size); ctx.lineTo(s.x + s.size, s.y); ctx.lineTo(s.x, s.y + s.size); ctx.lineTo(s.x, s.y + s.size); ctx.closePath(); ctx.fill(); }
         });
     });
 
@@ -623,7 +758,7 @@ function draw() {
         ctx.fillStyle = "white";
         ctx.font = "bold 20px Rajdhani";
         ctx.textAlign = "center";
-        ctx.fillText("MODE SPECTATEUR", CONFIG.baseWidth / 2, 40);
+        ctx.fillText("MODE SPECTATEUR", 400, 40);
 
         // Bonus: Flèche au dessus du joueur suivi s'il y en a un qui est vivant
         const alivePlayers = Object.keys(players).filter(id => players[id].isAlive !== false);
@@ -659,7 +794,7 @@ function loop(timestamp) {
     requestAnimationFrame(loop);
 }
 
-function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; shakeAmount = 8; } }
+function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; } }
 
 function endGame() {
     gameActive = false;
@@ -741,7 +876,12 @@ function confirmDeath() {
     }
 
     updateNéonUI();
+    checkAutoReturnToLobby();
 }
+
+document.getElementById('playerName').addEventListener('change', (e) => {
+    localStorage.setItem('playerPseudo', e.target.value.trim());
+});
 
 function startSpectating() {
     isSpectating = true;
@@ -755,6 +895,37 @@ function backToMenu() {
     isSpectating = false;
     showScreen('menu');
     updateNéonUI();
+}
+
+// Système de retour au salon automatique
+function checkAutoReturnToLobby() {
+    if (!peer || (!conn && connections.length === 0)) return;
+
+    // On attend un peu pour laisser voir le game over
+    setTimeout(() => {
+        const allDead = !gameActive && (isSpectating || !gameActive) &&
+            Object.keys(players).every(id => players[id].isAlive === false);
+
+        // Version simplifiée : si on est là, c'est qu'on est mort. 
+        // Si tous les autres joueurs enregistrés sont aussi morts, on rentre tous.
+        if (allDead) {
+            returnToLobby();
+        }
+    }, 2000);
+}
+
+function returnToLobby() {
+    gameActive = false;
+    isSpectating = false;
+    isReady = false; // Reset ready state
+    const readyBtn = document.getElementById('readyBtn');
+    if (readyBtn) {
+        readyBtn.innerText = "PAS PRÊT";
+        readyBtn.classList.remove('active');
+    }
+
+    showScreen('multiMenu');
+    updateLobbyUI();
 }
 updateNéonUI();
 // Initialiser le premier écran

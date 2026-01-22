@@ -59,16 +59,53 @@ body {
 #shop,
 #multiMenu {
     max-width: 480px;
+    width: 90%;
     height: auto;
     text-align: center;
-    background: rgba(15, 23, 42, 0.8);
+    background: rgba(15, 23, 42, 0.85);
     backdrop-filter: blur(24px) saturate(180%);
     -webkit-backdrop-filter: blur(24px) saturate(180%);
-    padding: 3.5rem;
-    border-radius: 32px;
+    padding: 2.5rem 1.5rem;
+    border-radius: 24px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
     z-index: 100;
+}
+
+@media (max-width: 600px) {
+
+    #menu,
+    #deathScreen,
+    #gameOver,
+    #shop,
+    #multiMenu {
+        padding: 1.5rem 1rem;
+        border-radius: 20px;
+    }
+
+    #gameOver h2 {
+        font-size: 2rem !important;
+    }
+
+    .shop-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 0.8rem !important;
+    }
+}
+
+@media (max-width: 400px) {
+    .btn-level {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        padding: 0.8rem !important;
+    }
+
+    .reward-badge {
+        position: static !important;
+        transform: none !important;
+    }
 }
 
 /* Le jeu prend tout l'écran */
@@ -215,21 +252,36 @@ button:hover::after {
 
 #hud {
     position: absolute;
-    top: 30px;
-    left: 30px;
-    right: 30px;
+    top: 20px;
+    left: 20px;
+    right: 20px;
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    /* Aligné en haut */
     pointer-events: none;
     z-index: 50;
     background: none;
-    /* Plus de fond */
-    backdrop-filter: none;
-    /* Plus de flou */
-    border: none;
     padding: 0;
+}
+
+@media (max-width: 600px) {
+    #hud {
+        top: 15px;
+        left: 15px;
+        right: 15px;
+    }
+
+    #score {
+        font-size: 1.1rem !important;
+    }
+
+    #bestScore {
+        font-size: 0.8rem !important;
+    }
+
+    #currentNéonsHUD {
+        font-size: 1rem !important;
+    }
 }
 
 #score,
@@ -520,28 +572,198 @@ button:hover::after {
     border-radius: 10px;
 }
 
-/* Styles Multijoueur */
+/* Styles Multijoueur Refondus */
+#multiMenu {
+    max-width: 650px;
+    /* Plus large pour le côte-à-côte */
+    padding: 1.5rem;
+}
+
+.multi-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.pseudo-top {
+    max-width: 100%;
+    margin-bottom: 5px;
+    font-size: 1rem;
+    padding: 10px;
+}
+
+.multi-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 20px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.side-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.side-panel h3 {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 5px;
+    letter-spacing: 1px;
+}
+
+.divider-v {
+    width: 1px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-group-v {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.btn-sm {
+    padding: 8px 12px;
+    font-size: 0.7rem;
+}
+
+.input-sm {
+    padding: 8px;
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+}
+
+.code-text {
+    margin-top: 8px;
+    color: var(--neon-gold);
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+
+.lobby-panel {
+    background: rgba(0, 255, 204, 0.05);
+    border-radius: 12px;
+    padding: 15px;
+    margin-top: 5px;
+}
+
+.lobby-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.lobby-header p {
+    color: #00ffcc;
+    font-weight: bold;
+    margin: 0;
+}
+
+.status-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.player-status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 0.75rem;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.status-indicator.ready {
+    background: #00ffcc;
+    box-shadow: 0 0 5px #00ffcc;
+}
+
+.status-indicator.not-ready {
+    background: #ff0055;
+    box-shadow: 0 0 5px #ff0055;
+}
+
+.host-controls {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 12px;
+}
+
+.label-sm {
+    font-size: 0.7rem;
+    margin-bottom: 8px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.level-select-sm {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+}
+
+.btn-level-sm {
+    padding: 6px;
+    font-size: 0.65rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-level-sm:hover:not(:disabled) {
+    border-color: #00ffcc;
+    background: rgba(0, 255, 204, 0.1);
+}
+
+.wait-msg {
+    font-style: italic;
+    font-size: 0.8rem;
+    margin-top: 10px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.btn-ready {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.75rem;
+}
+
+.btn-ready.active {
+    background: #00ffcc;
+    color: #080b12;
+    border-color: #00ffcc;
+}
+
 .multi-input {
     width: 100%;
-    padding: 12px;
+    padding: 10px;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
     color: white;
-    margin-bottom: 10px;
-    font-family: 'Orbitron', sans-serif;
     text-align: center;
-}
-
-#multiMenu {
-    max-width: 400px;
-}
-
-.multi-actions {
-    margin-top: 20px;
-}
-
-.host-side,
-.join-side {
-    padding: 10px 0;
+    font-family: 'Orbitron', sans-serif;
 }

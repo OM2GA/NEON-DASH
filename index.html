@@ -20,8 +20,7 @@
             <div class="stats-bar">
                 <div id="totalNéonsMenu">Néons: 0</div>
             </div>
-            <input type="text" id="playerName" placeholder="Ton Pseudo" class="multi-input"
-                style="max-width: 300px; margin: 0 auto 20px auto; display: block;">
+
             <div class="menu-actions">
                 <div class="level-select">
                     <button class="btn-level" onclick="startGame('neon')" aria-label="Démarrer le mode Cyber Neon">
@@ -66,37 +65,53 @@
         <section id="multiMenu" class="shop">
             <h2>MULTIVERSUM</h2>
 
-            <div class="multi-actions">
-                <div class="host-side">
-                    <button onclick="hostGame()" class="btn-primary">CRÉER UN GROUPE</button>
-                    <p id="groupCodeDisplay" style="margin-top:10px; color: var(--neon-gold)"></p>
-                </div>
-                <hr style="margin: 20px 0; opacity: 0.2;">
-                <div class="join-side">
-                    <input type="text" id="joinCode" placeholder="Code du groupe" class="multi-input">
-                    <button onclick="joinGame()" class="btn-secondary">REJOINDRE</button>
-                </div>
-            </div>
-            <div id="lobbyInfo" style="margin-top: 20px; display:none;">
-                <p style="color: #00ffcc; font-weight: bold;">Joueurs : <span id="playerCount">1</span></p>
+            <div class="multi-container">
+                <input type="text" id="playerName" placeholder="Ton Pseudo" class="multi-input pseudo-top">
 
-                <div id="hostControls"
-                    style="display:none; margin-top:15px; border-top: 1px solid rgba(255,255,255,0.1); padding-top:15px;">
-                    <p style="font-size: 0.8rem; margin-bottom: 10px;">CHOISIR LA DESTINATION :</p>
-                    <div class="level-select">
-                        <button class="btn-level" onclick="broadcastStart('neon')"
-                            style="padding: 10px; font-size: 0.7rem;">NEON</button>
-                        <button class="btn-level" onclick="broadcastStart('lava')"
-                            style="padding: 10px; font-size: 0.7rem;">LAVA</button>
-                        <button class="btn-level" onclick="broadcastStart('ice')"
-                            style="padding: 10px; font-size: 0.7rem;">ICE</button>
+                <div class="multi-grid">
+                    <div class="side-panel">
+                        <h3>CRÉER</h3>
+                        <div class="btn-group-v">
+                            <button onclick="generateRandomHostCode()" class="btn-primary btn-sm">GÉNÉRER CODE</button>
+                            <button onclick="hostGame()" class="btn-secondary btn-sm"
+                                style="border-color: #ffd700; color: #ffd700;">ACTIVER SALON</button>
+                        </div>
+                        <p id="groupCodeDisplay" class="code-text"></p>
+                    </div>
+
+                    <div class="divider-v"></div>
+
+                    <div class="side-panel">
+                        <h3>REJOINDRE</h3>
+                        <input type="text" id="joinCode" placeholder="Code" class="multi-input input-sm">
+                        <button onclick="joinGame()" class="btn-secondary btn-sm">REJOINDRE</button>
                     </div>
                 </div>
 
-                <p id="waitMessage" style="display:none; font-style: italic; font-size: 0.9rem; margin-top: 10px;">En
-                    attente du chef de groupe...</p>
+                <div id="lobbyInfo" class="lobby-panel" style="display:none;">
+                    <hr style="margin: 10px 0; opacity: 0.1;">
+                    <div class="lobby-header">
+                        <p>Joueurs : <span id="playerCount">1</span></p>
+                        <button id="readyBtn" onclick="toggleReady()" class="btn-ready">PAS PRÊT</button>
+                    </div>
+
+                    <div id="playerStatusList" class="status-list">
+                        <!-- Liste des joueurs -->
+                    </div>
+
+                    <div id="hostControls" class="host-controls" style="display:none;">
+                        <p class="label-sm">DESTINATION :</p>
+                        <div class="level-select-sm">
+                            <button class="btn-level-sm" onclick="broadcastStart('neon')">NEON</button>
+                            <button class="btn-level-sm" onclick="broadcastStart('lava')">LAVA</button>
+                            <button class="btn-level-sm" onclick="broadcastStart('ice')">ICE</button>
+                        </div>
+                    </div>
+
+                    <p id="waitMessage" class="wait-msg" style="display:none;">En attente du chef...</p>
+                </div>
             </div>
-            <button onclick="showScreen('menu')" class="btn-skip">RETOUR</button>
+            <button onclick="showScreen('menu')" class="btn-skip" style="margin-top: 10px;">RETOUR</button>
         </section>
 
         <!-- Interface de Jeu -->
