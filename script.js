@@ -133,7 +133,12 @@ function showScreen(screenId) {
         if (id === screenId) {
             el.classList.add('screen-active');
         } else {
-            el.classList.remove('screen-active');
+            // Cas spécial : on garde le HUD et le Canvas visibles si on est en train de mourir ou en game over
+            if (id === 'gameUI' && (screenId === 'deathScreen' || screenId === 'gameOver')) {
+                el.classList.add('screen-active');
+            } else {
+                el.classList.remove('screen-active');
+            }
         }
     });
 }
@@ -685,78 +690,38 @@ function update(dt) {
     }
 
     if (!gameActive) return;
-    score += factor;
-    scoreElement.innerText = `Score: ${Math.floor(score)}`;
+
+    if (!isSpectating) {
+        score += factor;
+        scoreElement.innerText = `Score: ${Math.floor(score)}`;
+        if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
+    }
 
     if (shakeAmount > 0) shakeAmount *= 0.9;
     if (shakeAmount < 0.1) shakeAmount = 0;
 
-    if (isSpectating) {
-        // En mode spectateur, on ne gère que les éléments visuels
-        backgroundLayers.forEach(layer => layer.forEach(s => {
-            s.x -= gameSpeed * s.speed * factor;
-            if (s.x < -20) s.x = 800 + 20;
-            if (s.y < -20) s.y = 400 + 20; // Wrapping Y
-            if (s.y > 400 + 20) s.y = -20;
-        }));
-
-        obstacles.forEach((o, i) => {
-            o.x -= gameSpeed * factor;
-            if (o.x + o.w < 0) obstacles.splice(i, 1);
-        });
-
-        coins.forEach((c, i) => {
-            c.x -= gameSpeed * factor; c.pulse += 0.1 * factor;
-            if (c.x + c.size < 0 || c.collected) coins.splice(i, 1);
-        });
-
-        for (let i = particles.length - 1; i >= 0; i--) {
-            const p = particles[i];
-            p.x += p.vx * factor; p.y += p.vy * factor; p.life -= 0.02 * factor;
-            if (p.life <= 0) particles.splice(i, 1);
-        }
-
-        // En mode multi, les obstacles sont reçus de l'hôte
-        // En mode solo, on les génère localement (mais isSpectating est normalement false en solo)
-        if (!peer || (!conn && connections.length === 0)) {
-            lastObstacleTime += dt;
-            if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
-                const isTop = Math.random() > 0.5;
-                const h = 60 + Math.random() * 120;
-                obstacles.push({ x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h });
-                lastObstacleTime = 0;
-            }
-        }
-
-        lastCoinTime += dt;
-        if (lastCoinTime > CONFIG.coinInterval) { createCoin(); lastCoinTime = 0; }
-
-        return;
-    }
-
-    if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
-
+    // --- MISE À JOUR VISUELLE COMMUNE (Joueur ou Spectateur) ---
     backgroundLayers.forEach(layer => layer.forEach(s => {
         s.x -= gameSpeed * s.speed * factor;
         if (s.x < -20) s.x = 800 + 20;
-        if (s.y < -20) s.y = 400 + 20; // Wrapping Y
+        if (s.y < -20) s.y = 400 + 20;
         if (s.y > 400 + 20) s.y = -20;
     }));
 
-    player.velocity += (player.onCeiling ? -CONFIG.gravity : CONFIG.gravity) * factor;
-    player.y += player.velocity * factor;
-    player.y = Math.max(0, Math.min(400 - player.size, player.y));
-    if (player.y === 0 || player.y === 400 - player.size) player.velocity = 0;
+    obstacles.forEach((o, i) => {
+        o.x -= gameSpeed * factor;
+        if (!isSpectating && checkCollision(player, o)) endGame();
+        if (o.x + o.w < 0) obstacles.splice(i, 1);
+    });
 
-    trail.unshift({ x: player.x, y: player.y, rotation: currentRotation });
-    if (trail.length > CONFIG.trailMax) trail.pop();
-
-    lastParticleTime += dt;
-    if (lastParticleTime > CONFIG.particleInterval) {
-        const pColor = customColors[activeParticleColor].value || currentTheme.player;
-        createParticle(player.x, player.y + player.size / 2, -Math.random() * 3 - 2, (Math.random() - 0.5) * 4, pColor, Math.random() * 6 + 2);
-        lastParticleTime = 0;
-    }
+    coins.forEach((c, i) => {
+        c.x -= gameSpeed * factor; c.pulse += 0.1 * factor;
+        if (!isSpectating && !c.collected && checkCollision(player, { x: c.x - 2, y: c.y - 2, w: c.size + 4, h: c.size + 4 })) {
+            c.collected = true; currentSessionNéons += currentTheme.reward; updateNéonUI();
+            for (let j = 0; j < 8; j++) createParticle(c.x, c.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, "#ffd700", Math.random() * 4 + 2);
+        }
+        if (c.x + c.size < 0 || c.collected) coins.splice(i, 1);
+    });
 
     for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -764,9 +729,9 @@ function update(dt) {
         if (p.life <= 0) particles.splice(i, 1);
     }
 
+    // Spawn des obstacles (Host uniquement en multi)
     lastObstacleTime += dt;
     if (lastObstacleTime > Math.max(450, currentTheme.interval - (gameSpeed * 40))) {
-        // Seul le Host génère les obstacles en multi
         if (isHost || !peer || (!conn && connections.length === 0)) {
             const isTop = Math.random() > 0.5;
             const h = 60 + Math.random() * 120;
@@ -774,7 +739,6 @@ function update(dt) {
             obstacles.push(newObs);
             lastObstacleTime = 0;
 
-            // Broadcast de l'obstacle si on est Host
             if (isHost && connections.length > 0) {
                 connections.forEach(c => {
                     if (c.open) c.send({ type: 'obstacle-spawn', obstacle: newObs });
@@ -783,23 +747,26 @@ function update(dt) {
         }
     }
 
-    obstacles.forEach((o, i) => {
-        o.x -= gameSpeed * factor;
-        if (checkCollision(player, o)) endGame();
-        if (o.x + o.w < 0) obstacles.splice(i, 1);
-    });
-
     lastCoinTime += dt;
     if (lastCoinTime > CONFIG.coinInterval) { createCoin(); lastCoinTime = 0; }
 
-    coins.forEach((c, i) => {
-        c.x -= gameSpeed * factor; c.pulse += 0.1 * factor;
-        if (!c.collected && checkCollision(player, { x: c.x - 2, y: c.y - 2, w: c.size + 4, h: c.size + 4 })) {
-            c.collected = true; currentSessionNéons += currentTheme.reward; updateNéonUI();
-            for (let j = 0; j < 8; j++) createParticle(c.x, c.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, "#ffd700", Math.random() * 4 + 2);
+    // --- LOGIQUE JOUEUR ALIVE UNIQUEMENT ---
+    if (!isSpectating) {
+        player.velocity += (player.onCeiling ? -CONFIG.gravity : CONFIG.gravity) * factor;
+        player.y += player.velocity * factor;
+        player.y = Math.max(0, Math.min(400 - player.size, player.y));
+        if (player.y === 0 || player.y === 400 - player.size) player.velocity = 0;
+
+        trail.unshift({ x: player.x, y: player.y, rotation: currentRotation });
+        if (trail.length > CONFIG.trailMax) trail.pop();
+
+        lastParticleTime += dt;
+        if (lastParticleTime > CONFIG.particleInterval) {
+            const pColor = customColors[activeParticleColor].value || currentTheme.player;
+            createParticle(player.x, player.y + player.size / 2, -Math.random() * 3 - 2, (Math.random() - 0.5) * 4, pColor, Math.random() * 6 + 2);
+            lastParticleTime = 0;
         }
-        if (c.x + c.size < 0 || c.collected) coins.splice(i, 1);
-    });
+    }
 }
 
 function checkCollision(p, o) {
@@ -883,12 +850,20 @@ function draw() {
     ctx.globalAlpha = 1;
 
     // Joueur local
-    if (!isSpectating && gameActive) {
+    if (gameActive) {
         ctx.save();
         ctx.translate(player.x + player.size / 2, player.y + player.size / 2);
-        currentRotation += (targetRotation - currentRotation) * 0.15;
+
+        if (isSpectating) {
+            ctx.globalAlpha = 0.4; // Semi-transparent si spectateur
+        } else {
+            currentRotation += (targetRotation - currentRotation) * 0.15;
+        }
+
         ctx.rotate(currentRotation);
-        ctx.shadowBlur = 15; ctx.shadowColor = pColor; ctx.fillStyle = pColor;
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = pColor;
+        ctx.fillStyle = pColor;
         style.draw(ctx, 0, 0, player.size);
         ctx.restore();
     }
@@ -936,11 +911,13 @@ function loop(timestamp) {
 function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; } }
 
 function endGame() {
-    gameActive = false;
     shakeAmount = 20;
 
     // Force sync immédiat pour informer les autres de la mort
     if (peer && (conn || connections.length > 0)) {
+        isSpectating = true;
+        gameActive = true;
+
         const myData = {
             type: 'sync',
             id: peer.id,
@@ -953,6 +930,8 @@ function endGame() {
         };
         if (isHost) connections.forEach(c => c.send(myData));
         else if (conn) conn.send(myData);
+    } else {
+        gameActive = false;
     }
 
     // Calculer le coût de revive
@@ -1008,6 +987,7 @@ function revivePlayer() {
 
         showScreen('gameUI');
         gameActive = true;
+        isSpectating = false; // Reset spectator state when reviving
         lastTime = performance.now();
         requestAnimationFrame(loop);
         updateNéonUI();
@@ -1027,10 +1007,11 @@ function confirmDeath() {
 
     // Si on est en multi, passage automatique en mode spectateur après un court délai
     if (peer && (conn || connections.length > 0)) {
+        const spectateBtn = document.getElementById('spectateBtn');
+        if (spectateBtn) spectateBtn.style.display = 'block';
+
         setTimeout(() => {
-            if (!gameActive && !isSpectating) {
-                startSpectating();
-            }
+            startSpectating();
         }, 3000); // 3 secondes pour voir ses points gagnés
     }
 
@@ -1044,7 +1025,7 @@ document.getElementById('playerName').addEventListener('change', (e) => {
 
 function startSpectating() {
     // Si on est déjà revenu au menu ou si on n'est plus en multi, on ne fait rien
-    const currentScreen = document.querySelector('.screen.active')?.id;
+    const currentScreen = document.querySelector('.screen-active')?.id;
     if (currentScreen !== 'gameOver' && currentScreen !== 'deathScreen') return;
     if (!peer || (!conn && connections.length === 0)) return;
 
