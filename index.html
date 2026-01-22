@@ -37,6 +37,8 @@
                 </div>
                 <button class="btn-shop" onclick="openShop()" aria-label="Ouvrir la boutique">BOUTIQUE DES
                     SKINS</button>
+                <button class="btn-shop" onclick="openMultiMenu()"
+                    style="border-color: #a855f7; color: #a855f7;">MULTIJOUEUR (P2P)</button>
             </div>
         </section>
 
@@ -56,6 +58,30 @@
                 <!-- Items générés par JS -->
             </div>
             <button onclick="closeShop()" class="btn-secondary">RETOUR AU MENU</button>
+        </section>
+
+        <!-- Menu Multijoueur -->
+        <section id="multiMenu" class="shop">
+            <h2>MULTIVERSUM</h2>
+            <input type="text" id="playerName" placeholder="Ton Pseudo" class="multi-input">
+
+            <div class="multi-actions">
+                <div class="host-side">
+                    <button onclick="hostGame()" class="btn-primary">CRÉER UN GROUPE</button>
+                    <p id="groupCodeDisplay" style="margin-top:10px; color: var(--neon-gold)"></p>
+                </div>
+                <hr style="margin: 20px 0; opacity: 0.2;">
+                <div class="join-side">
+                    <input type="text" id="joinCode" placeholder="Code du groupe" class="multi-input">
+                    <button onclick="joinGame()" class="btn-secondary">REJOINDRE</button>
+                </div>
+            </div>
+            <div id="lobbyInfo" style="margin-top: 20px; display:none;">
+                <p>Joueurs connectés : <span id="playerCount">1</span></p>
+                <button id="startMultiBtn" onclick="startMultiGame()" class="btn-level"
+                    style="display:none; margin-top:10px;">LANCER LA PARTIE</button>
+            </div>
+            <button onclick="showScreen('menu')" class="btn-skip">RETOUR</button>
         </section>
 
         <!-- Interface de Jeu -->
@@ -100,6 +126,7 @@
         </section>
     </main>
 
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <script src="script.js"></script>
 </body>
 

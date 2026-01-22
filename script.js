@@ -68,6 +68,13 @@ let lastParticleTime = 0;
 let shakeAmount = 0;
 let scaleFactor = 1;
 
+// Variables Réseau
+let peer = null;
+let conn = null; // Connexion unique si on est client
+let connections = []; // Liste des connexions si on est host
+let isHost = false;
+let players = {}; // Contient les positions des autres joueurs
+
 // Système de Redimensionnement Responsive
 function resize() {
     const dpr = window.devicePixelRatio || 1;
@@ -91,7 +98,7 @@ resize();
 
 // Gestionnaire d'Écrans (Transitions fluides)
 function showScreen(screenId) {
-    const screens = ['menu', 'shop', 'gameUI', 'gameOver', 'deathScreen'];
+    const screens = ['menu', 'shop', 'gameUI', 'gameOver', 'deathScreen', 'multiMenu'];
     screens.forEach(id => {
         const el = document.getElementById(id);
         if (id === screenId) {
@@ -303,11 +310,103 @@ function createCoin() {
     coins.push({ x: CONFIG.baseWidth, y: yPos, size: CONFIG.coinSize, collected: false, pulse: 0 });
 }
 
+// --- LOGIQUE MULTIJOUEUR ---
+function openMultiMenu() {
+    showScreen('multiMenu');
+    if (!peer) {
+        // Création d'un ID aléatoire court pour le code
+        const randomId = Math.random().toString(36).substring(2, 7).toUpperCase();
+        peer = new Peer("ND-" + randomId);
+
+        peer.on('open', (id) => {
+            document.getElementById('groupCodeDisplay').innerText = "Ton Code : " + id.replace("ND-", "");
+        });
+
+        peer.on('connection', (c) => {
+            connections.push(c);
+            setupConnHandlers(c);
+            isHost = true;
+            document.getElementById('lobbyInfo').style.display = 'block';
+            document.getElementById('startMultiBtn').style.display = 'block';
+            updateLobbyUI();
+        });
+    }
+}
+
+function hostGame() {
+    alert("Attends que tes amis rejoignent avec le code affiché !");
+}
+
+function joinGame() {
+    const code = document.getElementById('joinCode').value.toUpperCase();
+    if (!code) return;
+    conn = peer.connect("ND-" + code);
+    setupConnHandlers(conn);
+}
+
+function setupConnHandlers(c) {
+    c.on('open', () => {
+        if (!isHost) {
+            document.getElementById('lobbyInfo').style.display = 'block';
+            document.getElementById('startMultiBtn').style.display = 'none';
+        }
+        updateLobbyUI();
+    });
+
+    c.on('data', (data) => {
+        if (data.type === 'init-game') {
+            startGame(data.theme);
+        }
+        if (data.type === 'sync') {
+            players[data.id] = data; // On stocke les positions reçues
+        }
+    });
+
+    c.on('close', () => {
+        if (isHost) {
+            connections = connections.filter(conn => conn !== c);
+        } else {
+            conn = null;
+        }
+        updateLobbyUI();
+    });
+}
+
+function updateLobbyUI() {
+    const count = isHost ? connections.length + 1 : (conn ? 2 : 1);
+    document.getElementById('playerCount').innerText = count;
+}
+
+function startMultiGame() {
+    const theme = 'neon'; // On peut choisir le thème par défaut ou laisser le host choisir
+    connections.forEach(c => c.send({ type: 'init-game', theme: theme }));
+    startGame(theme);
+}
+// -----------------------------
+
 function update(dt) {
     if (!gameActive) return;
     const factor = dt / 16.67;
     score += factor;
     scoreElement.innerText = `Score: ${Math.floor(score)}`;
+
+    // Sync réseau
+    if (peer && (conn || connections.length > 0)) {
+        const myData = {
+            type: 'sync',
+            id: peer.id,
+            y: player.y,
+            pseudo: document.getElementById('playerName').value || "Anonyme",
+            shape: activeParticle,
+            color: customColors[activePlayerColor].value || currentTheme.player
+        };
+
+        if (isHost) {
+            connections.forEach(c => c.send(myData));
+        } else if (conn) {
+            conn.send(myData);
+        }
+    }
     if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
     if (shakeAmount > 0) shakeAmount *= 0.9;
 
@@ -370,6 +469,25 @@ function draw() {
     ctx.save();
     if (shakeAmount > 0.1) ctx.translate((Math.random() - 0.5) * shakeAmount, (Math.random() - 0.5) * shakeAmount);
     ctx.clearRect(-100, -100, CONFIG.baseWidth + 200, CONFIG.baseHeight + 200);
+
+    // Dessiner les autres joueurs
+    Object.keys(players).forEach(id => {
+        const p = players[id];
+        if (id !== peer?.id) {
+            ctx.save();
+            ctx.globalAlpha = 0.6; // Un peu transparent
+            ctx.fillStyle = p.color;
+            // On dessine une forme simple pour les autres
+            ctx.fillRect(CONFIG.playerX, p.y, CONFIG.playerSize, CONFIG.playerSize);
+
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = "white";
+            ctx.font = "10px Orbitron";
+            ctx.textAlign = "center";
+            ctx.fillText(p.pseudo, CONFIG.playerX + CONFIG.playerSize / 2, p.y - 10);
+            ctx.restore();
+        }
+    });
 
     backgroundLayers.forEach((layer, index) => {
         ctx.fillStyle = currentTheme.obs + (index === 0 ? "22" : index === 1 ? "44" : "66");

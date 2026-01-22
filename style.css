@@ -36,6 +36,7 @@ body {
 #deathScreen,
 #gameOver,
 #shop,
+#multiMenu,
 #gameUI {
     position: absolute;
     top: 50%;
@@ -55,7 +56,8 @@ body {
 #menu,
 #deathScreen,
 #gameOver,
-#shop {
+#shop,
+#multiMenu {
     max-width: 480px;
     height: auto;
     text-align: center;
@@ -90,7 +92,8 @@ body {
 #menu:not(.screen-active),
 #deathScreen:not(.screen-active),
 #gameOver:not(.screen-active),
-#shop:not(.screen-active) {
+#shop:not(.screen-active),
+#multiMenu:not(.screen-active) {
     transform: translate(-50%, -48%) scale(0.95);
 }
 
@@ -515,4 +518,30 @@ button:hover::after {
 .shop-grid::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.1);
     border-radius: 10px;
+}
+
+/* Styles Multijoueur */
+.multi-input {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: white;
+    margin-bottom: 10px;
+    font-family: 'Orbitron', sans-serif;
+    text-align: center;
+}
+
+#multiMenu {
+    max-width: 400px;
+}
+
+.multi-actions {
+    margin-top: 20px;
+}
+
+.host-side,
+.join-side {
+    padding: 10px 0;
 }
