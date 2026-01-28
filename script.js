@@ -310,21 +310,21 @@ let currentTheme = themes['neon'];
 const particleStyles = {
     square: { name: "CARRE", icon: "□", price: 0, draw: (ctx, x, y, s) => ctx.fillRect(x - s / 2, y - s / 2, s, s) },
     circle: { name: "ROND", icon: "○", price: 0, draw: (ctx, x, y, s) => { ctx.beginPath(); ctx.arc(x, y, s / 2, 0, Math.PI * 2); ctx.fill(); } },
-    triangle: { name: "TRIANGLE", icon: "△", price: 0, draw: (ctx, x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s / 2); ctx.lineTo(x + s / 2, y + s / 2); ctx.lineTo(x - s / 2, y + s / 2); ctx.closePath(); ctx.fill(); } },
-    star: { name: "ETOILE", icon: "☆", price: 0, draw: (ctx, x, y, s) => { ctx.beginPath(); for (let i = 0; i < 5; i++) { ctx.lineTo(x + Math.cos((18 + i * 72) * Math.PI / 180) * s / 2, y - Math.sin((18 + i * 72) * Math.PI / 180) * s / 2); ctx.lineTo(x + Math.cos((54 + i * 72) * Math.PI / 180) * s / 4, y - Math.sin((54 + i * 72) * Math.PI / 180) * s / 4); } ctx.closePath(); ctx.fill(); } },
-    diamond: { name: "LOSANGE", icon: "◇", price: 0, draw: (ctx, x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s / 2); ctx.lineTo(x + s / 2, y); ctx.lineTo(x, y + s / 2); ctx.lineTo(x - s / 2, y); ctx.closePath(); ctx.fill(); } },
-    hexagon: { name: "HEXAGONE", icon: "⬡", price: 0, draw: (ctx, x, y, s) => { ctx.beginPath(); for (let i = 0; i < 6; i++) { ctx.lineTo(x + Math.cos(i * Math.PI / 3) * s / 2, y + Math.sin(i * Math.PI / 3) * s / 2); } ctx.closePath(); ctx.fill(); } },
-    cross: { name: "CROIX", icon: "✕", price: 0, draw: (ctx, x, y, s) => { ctx.fillRect(x - s / 2, y - s / 6, s, s / 3); ctx.fillRect(x - s / 6, y - s / 2, s / 3, s); } }
+    triangle: { name: "TRIANGLE", icon: "△", price: 200, draw: (ctx, x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s / 2); ctx.lineTo(x + s / 2, y + s / 2); ctx.lineTo(x - s / 2, y + s / 2); ctx.closePath(); ctx.fill(); } },
+    star: { name: "ETOILE", icon: "☆", price: 750, draw: (ctx, x, y, s) => { ctx.beginPath(); for (let i = 0; i < 5; i++) { ctx.lineTo(x + Math.cos((18 + i * 72) * Math.PI / 180) * s / 2, y - Math.sin((18 + i * 72) * Math.PI / 180) * s / 2); ctx.lineTo(x + Math.cos((54 + i * 72) * Math.PI / 180) * s / 4, y - Math.sin((54 + i * 72) * Math.PI / 180) * s / 4); } ctx.closePath(); ctx.fill(); } },
+    diamond: { name: "LOSANGE", icon: "◇", price: 350, draw: (ctx, x, y, s) => { ctx.beginPath(); ctx.moveTo(x, y - s / 2); ctx.lineTo(x + s / 2, y); ctx.lineTo(x, y + s / 2); ctx.lineTo(x - s / 2, y); ctx.closePath(); ctx.fill(); } },
+    hexagon: { name: "HEXAGONE", icon: "⬡", price: 900, draw: (ctx, x, y, s) => { ctx.beginPath(); for (let i = 0; i < 6; i++) { ctx.lineTo(x + Math.cos(i * Math.PI / 3) * s / 2, y + Math.sin(i * Math.PI / 3) * s / 2); } ctx.closePath(); ctx.fill(); } },
+    cross: { name: "CROIX", icon: "✕", price: 500, draw: (ctx, x, y, s) => { ctx.fillRect(x - s / 2, y - s / 6, s, s / 3); ctx.fillRect(x - s / 6, y - s / 2, s / 3, s); } }
 };
 
 const customColors = {
     default: { name: "THEME", value: null, price: 0 },
     neon: { name: "NEON", value: "#00ffcc", price: 0 },
-    gold: { name: "OR", value: "#ffd700", price: 0 },
-    ruby: { name: "RUBY", value: "#ff0055", price: 0 },
-    ice: { name: "GLACE", value: "#00d4ff", price: 0 },
-    purple: { name: "VIOLET", value: "#a855f7", price: 0 },
-    white: { name: "BLANC", value: "#ffffff", price: 0 }
+    gold: { name: "OR", value: "#ffd700", price: 1500 },
+    ruby: { name: "RUBY", value: "#ff0055", price: 1500 },
+    ice: { name: "GLACE", value: "#00d4ff", price: 1500 },
+    purple: { name: "VIOLET", value: "#a855f7", price: 300 },
+    white: { name: "BLANC", value: "#ffffff", price: 300 }
 };
 
 const player = { x: CONFIG.playerX, y: 200, size: CONFIG.playerSize, velocity: 0, onCeiling: false };
@@ -463,11 +463,14 @@ function initCropEditor() {
                 // Calcul du zoom initial pour couvrir les 300px
                 const minZoom = Math.max(300 / img.width, 300 / img.height);
                 cropState.zoom = minZoom;
-                zoomSlider.value = minZoom;
-                zoomSlider.min = minZoom * 0.5;
-                zoomSlider.max = minZoom * 5;
 
-                // Centrer
+                // Configurer le slider
+                zoomSlider.min = minZoom * 0.1;
+                zoomSlider.max = minZoom * 10;
+                zoomSlider.step = 0.001; // Forçage JS aussi pour être sûr
+                zoomSlider.value = minZoom; // Placer le curseur à la position initiale calculée
+
+                // Centrer l'image verticalement/horizontalement
                 cropState.x = (300 - img.width * cropState.zoom) / 2;
                 cropState.y = (300 - img.height * cropState.zoom) / 2;
 
@@ -507,7 +510,7 @@ function initCropEditor() {
 
     area.onwheel = (e) => {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const delta = e.deltaY > 0 ? 0.98 : 1.02;
         const newZoom = Math.max(parseFloat(zoomSlider.min), Math.min(parseFloat(zoomSlider.max), cropState.zoom * delta));
 
         const oldZoom = cropState.zoom;
