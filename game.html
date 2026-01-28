@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEON DASH | Multiverse Edition - Jeu d'Esquive Ultra-Fluide</title>
+    <meta name="description"
+        content="Défiez la gravité dans NEON DASH, un jeu de course 3D minimaliste avec des mondes néon, lave et glace. Score illimité et gameplay addictif.">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+
+<body>
+
+    <div id="bg-decoration"></div>
+    <canvas id="menuCanvas"></canvas>
+
+    <main id="app">
+        <!-- Menu Principal -->
+        <section id="menu">
+            <h1>NEON DASH</h1>
+            <p>Choisissez votre dimension</p>
+            <div class="stats-bar">
+                <div id="totalNéonsMenu">Néons: 0</div>
+            </div>
+
+            <div class="menu-actions">
+                <div class="level-select">
+                    <button class="btn-level" onclick="startGame('neon')" aria-label="Démarrer le mode Cyber Neon">
+                        CYBER NEON
+                        <span class="reward-badge">x1</span>
+                    </button>
+                    <button class="btn-level" onclick="startGame('lava')" aria-label="Démarrer le mode Lava Cave">
+                        LAVA CAVE
+                        <span class="reward-badge">x2</span>
+                    </button>
+                    <button class="btn-level" onclick="startGame('ice')" aria-label="Démarrer le mode Frozen Night">
+                        FROZEN NIGHT
+                        <span class="reward-badge">x3</span>
+                    </button>
+                </div>
+                <button class="btn-shop" onclick="openShop()" aria-label="Ouvrir la boutique">BOUTIQUE DES
+                    SKINS</button>
+                <button class="btn-shop" onclick="openMultiMenu()"
+                    style="border-color: #a855f7; color: #a855f7;">MULTIJOUEUR (P2P)</button>
+                <button class="btn-shop" onclick="showScreen('settings')"
+                    style="border-color: #00ffcc; color: #00ffcc;">PARAMÈTRES</button>
+            </div>
+        </section>
+
+        <!-- Paramètres -->
+        <section id="settings" class="shop">
+            <h2>PARAMÈTRES</h2>
+            <div class="settings-container">
+                <div class="setting-group">
+                    <label>Pseudo</label>
+                    <input type="text" id="playerPseudoSettings" placeholder="Ton Pseudo" class="multi-input">
+                </div>
+
+                <div class="setting-group">
+                    <label>Volume Musique (<span id="volumeValue">50</span>%)</label>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="50" class="neon-slider">
+                </div>
+
+                <div class="setting-group">
+                    <label>Qualité Graphique</label>
+                    <select id="qualitySelect" class="neon-select">
+                        <option value="high" selected>Haute (Ombres)</option>
+                        <option value="low">Performance (Fluide)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
+                    <label>Densité Particules</label>
+                    <select id="particleDensity" class="neon-select">
+                        <option value="low">Faible</option>
+                        <option value="medium" selected>Normale</option>
+                        <option value="high">Élevée</option>
+                    </select>
+                </div>
+
+                <div class="setting-group flex-row">
+                    <label>Auto-Revive (Néons)</label>
+                    <label class="switch">
+                        <input type="checkbox" id="autoReviveToggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+            <button onclick="showScreen('menu')" class="btn-secondary">RETOUR AU MENU</button>
+        </section>
+
+        <!-- Boutique -->
+        <section id="shop">
+
+            <h2>PERSONNALISATION</h2>
+            <div class="shop-balance">Solde: <span id="shopNéons">0</span> Néons</div>
+
+            <div class="shop-tabs">
+                <button class="tab-btn active" onclick="switchTab('shapes')">FORMES</button>
+                <button class="tab-btn" onclick="switchTab('colors-player')">COULEUR FORME</button>
+                <button class="tab-btn" onclick="switchTab('colors-particles')">COULEUR PARTICULES</button>
+            </div>
+
+            <div id="shopGrid" class="shop-grid">
+                <!-- Items générés par JS -->
+            </div>
+            <button onclick="closeShop()" class="btn-secondary">RETOUR AU MENU</button>
+        </section>
+
+        <!-- Menu Multijoueur -->
+        <section id="multiMenu" class="shop">
+            <h2>MULTIVERSUM</h2>
+
+            <div class="multi-container">
+                <input type="text" id="playerName" placeholder="Ton Pseudo" class="multi-input pseudo-top">
+
+                <div class="multi-grid">
+                    <div class="side-panel">
+                        <h3>CRÉER</h3>
+                        <div class="btn-group-v">
+                            <button onclick="generateRandomHostCode()" class="btn-primary btn-sm">GÉNÉRER CODE</button>
+                            <button onclick="hostGame()" class="btn-secondary btn-sm"
+                                style="border-color: #ffd700; color: #ffd700;">ACTIVER SALON</button>
+                        </div>
+                        <p id="groupCodeDisplay" class="code-text"></p>
+                    </div>
+
+                    <div class="divider-v"></div>
+
+                    <div class="side-panel">
+                        <h3>REJOINDRE</h3>
+                        <input type="text" id="joinCode" placeholder="Code" class="multi-input input-sm">
+                        <button onclick="joinGame()" class="btn-secondary btn-sm">REJOINDRE</button>
+                    </div>
+                </div>
+
+                <div id="lobbyInfo" class="lobby-panel" style="display:none;">
+                    <hr style="margin: 10px 0; opacity: 0.1;">
+                    <div class="lobby-header">
+                        <p>Joueurs : <span id="playerCount">1</span></p>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="readyBtn" onclick="toggleReady()" class="btn-ready">PAS PRÊT</button>
+                            <button onclick="quitLobby()" class="btn-ready"
+                                style="background: rgba(255, 0, 85, 0.1); border-color: #ff0055; color: #ff0055;">QUITTER</button>
+                        </div>
+                    </div>
+
+                    <div id="playerStatusList" class="status-list">
+                        <!-- Liste des joueurs -->
+                    </div>
+
+                    <div id="hostControls" class="host-controls" style="display:none;">
+                        <p class="label-sm">DESTINATION :</p>
+                        <div class="level-select-sm">
+                            <button class="btn-level-sm" onclick="broadcastStart('neon')">NEON</button>
+                            <button class="btn-level-sm" onclick="broadcastStart('lava')">LAVA</button>
+                            <button class="btn-level-sm" onclick="broadcastStart('ice')">ICE</button>
+                        </div>
+                    </div>
+
+                    <p id="waitMessage" class="wait-msg" style="display:none;">En attente du chef...</p>
+                </div>
+            </div>
+            <button onclick="showScreen('menu')" class="btn-skip" style="margin-top: 10px;">RETOUR</button>
+        </section>
+
+        <!-- Interface de Jeu -->
+        <section id="gameUI">
+
+            <div id="hud">
+                <div class="hud-left">
+                    <div id="score" aria-live="polite">Score: 0</div>
+                    <div id="bestScore">Record: 0</div>
+                </div>
+                <div id="currentNéonsHUD">Néons: 0</div>
+            </div>
+            <canvas id="gameCanvas"></canvas>
+            <button id="spectatorQuitBtn" onclick="quitSpectating()" class="btn-quit-spectator"
+                style="display: none;">QUITTER LA PARTIE</button>
+        </section>
+
+        <!-- Écran de Mort (Compte à rebours / Revivre) -->
+        <section id="deathScreen">
+            <h2>HOUPS !</h2>
+            <p>Voulez-vous revivre ?</p>
+            <div id="reviveStatus">Coût: <span id="reviveCost">10</span> Néons</div>
+
+            <div class="progress-container">
+                <div id="deathBar" class="progress-bar"></div>
+            </div>
+
+            <div class="death-actions">
+                <button id="reviveBtn" onclick="revivePlayer()" class="btn-revive">REVIVRE</button>
+                <button onclick="confirmDeath()" class="btn-skip">ABANDONNER</button>
+            </div>
+        </section>
+
+        <!-- Écran de Game Over -->
+        <section id="gameOver">
+
+            <h2 id="deathTitle">MATCH TERMINÉ</h2>
+            <div id="finalScore"></div>
+            <div id="rewardDisplay" class="reward-container">
+                <span class="earned-label">NÉONS GAGNÉS</span>
+                <span id="earnedNéons" class="earned-value">+0</span>
+            </div>
+            <div class="game-over-actions" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                <button onclick="backToMenu()" class="btn-primary">RETOUR AU MENU</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
