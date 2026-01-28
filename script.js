@@ -51,6 +51,8 @@ let gameActive = false;
 let gameSpeed = CONFIG.initialSpeed;
 let obstacles = [];
 let coins = [];
+let powerups = [];
+let activePowerups = {}; // {type: timeLeft}
 let particles = [];
 let trail = [];
 let backgroundLayers = [];
@@ -59,6 +61,29 @@ let deathTimer = null;
 let deathTimeLeft = 100; // Pourcentage
 let reviveCost = 10;
 let revivesInSession = 0;
+
+const POWERUP_TYPES = {
+    SHIELD: { id: 'shield', icon: '🛡️', color: '#00ffcc', duration: 10000 },
+    MAGNET: { id: 'magnet', icon: '🧲', color: '#ffd700', duration: 8000 },
+    SLOWMO: { id: 'slowmo', icon: '⏳', color: '#a855f7', duration: 5000 }
+};
+
+// Skin personnalisé
+let customSkinURL = localStorage.getItem('customSkinURL') || null;
+let customSkinImg = null;
+if (customSkinURL) {
+    customSkinImg = new Image();
+    customSkinImg.src = customSkinURL;
+}
+let cropState = {
+    img: null,
+    x: 0,
+    y: 0,
+    zoom: 1,
+    isDragging: false,
+    startX: 0,
+    startY: 0
+};
 
 // Paramètres (chargement depuis localStorage ou valeurs par défaut)
 let settings = {
@@ -324,6 +349,11 @@ function startGame(themeKey, isMulti = false) {
         updateLobbyUI();
     }
 
+    powerups = [];
+    activePowerups = {};
+    const indicators = document.getElementById('powerup-indicators');
+    if (indicators) indicators.innerHTML = '';
+
     resetStats();
     initBackground();
     gameActive = true; // Activer le jeu avant de lancer la musique
@@ -336,6 +366,8 @@ function resetStats() {
     gameSpeed = currentTheme.speed;
     obstacles = [];
     coins = [];
+    powerups = [];
+    activePowerups = {};
     particles = [];
     trail = [];
     player.y = CONFIG.baseHeight / 2 - CONFIG.playerSize / 2;
@@ -387,8 +419,159 @@ function switchTab(tab) {
         if (tab === 'shapes' && btn.innerText === 'FORMES') btn.classList.add('active');
         if (tab === 'colors-player' && btn.innerText === 'COULEUR FORME') btn.classList.add('active');
         if (tab === 'colors-particles' && btn.innerText === 'COULEUR PARTICULES') btn.classList.add('active');
+        if (tab === 'custom-image' && btn.innerText === 'IMAGE (SKIN)') btn.classList.add('active');
     });
-    renderShop();
+
+    const grid = document.getElementById('shopGrid');
+    const editor = document.getElementById('customSkinEditor');
+
+    if (tab === 'custom-image') {
+        grid.style.display = 'none';
+        editor.style.display = 'flex';
+        initCropEditor();
+    } else {
+        grid.style.display = 'grid';
+        editor.style.display = 'none';
+        renderShop();
+    }
+}
+
+function initCropEditor() {
+    const input = document.getElementById('skinImageInput');
+    const canvas = document.getElementById('cropCanvas');
+    const ctxCrop = canvas.getContext('2d');
+    const area = document.getElementById('cropArea');
+    const saveBtn = document.getElementById('saveCropBtn');
+    const resetBtn = document.getElementById('resetSkinBtn');
+    const zoomSlider = document.getElementById('cropZoomSlider');
+
+    // On force la taille du canvas de prévisualisation
+    canvas.width = 300;
+    canvas.height = 300;
+
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                cropState.img = img;
+                area.style.display = 'block';
+                saveBtn.style.display = 'block';
+
+                // Calcul du zoom initial pour couvrir les 300px
+                const minZoom = Math.max(300 / img.width, 300 / img.height);
+                cropState.zoom = minZoom;
+                zoomSlider.value = minZoom;
+                zoomSlider.min = minZoom * 0.5;
+                zoomSlider.max = minZoom * 5;
+
+                // Centrer
+                cropState.x = (300 - img.width * cropState.zoom) / 2;
+                cropState.y = (300 - img.height * cropState.zoom) / 2;
+
+                drawCrop();
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    function drawCrop() {
+        if (!cropState.img) return;
+        ctxCrop.clearRect(0, 0, canvas.width, canvas.height);
+        ctxCrop.save();
+        ctxCrop.translate(cropState.x, cropState.y);
+        ctxCrop.scale(cropState.zoom, cropState.zoom);
+        ctxCrop.drawImage(cropState.img, 0, 0);
+        ctxCrop.restore();
+
+        // On redessine le sélecteur visuellement si besoin, mais ici il est en CSS (cropSelector)
+        // Note: cropSelector est au milieu (100,100) et fait 100x100
+    }
+
+    zoomSlider.oninput = (e) => {
+        const oldZoom = cropState.zoom;
+        const newZoom = parseFloat(e.target.value);
+
+        // Zoomer vers le centre du canvas (150, 150)
+        const centerX = 150;
+        const centerY = 150;
+        cropState.x = centerX - (centerX - cropState.x) * (newZoom / oldZoom);
+        cropState.y = centerY - (centerY - cropState.y) * (newZoom / oldZoom);
+
+        cropState.zoom = newZoom;
+        drawCrop();
+    };
+
+    area.onwheel = (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        const newZoom = Math.max(parseFloat(zoomSlider.min), Math.min(parseFloat(zoomSlider.max), cropState.zoom * delta));
+
+        const oldZoom = cropState.zoom;
+        const centerX = e.offsetX;
+        const centerY = e.offsetY;
+
+        cropState.x = centerX - (centerX - cropState.x) * (newZoom / oldZoom);
+        cropState.y = centerY - (centerY - cropState.y) * (newZoom / oldZoom);
+
+        cropState.zoom = newZoom;
+        zoomSlider.value = newZoom;
+        drawCrop();
+    };
+
+    area.onmousedown = (e) => {
+        cropState.isDragging = true;
+        cropState.startX = e.clientX - cropState.x;
+        cropState.startY = e.clientY - cropState.y;
+    };
+
+    window.onmousemove = (e) => {
+        if (!cropState.isDragging) return;
+        cropState.x = e.clientX - cropState.startX;
+        cropState.y = e.clientY - cropState.startY;
+        drawCrop();
+    };
+
+    window.onmouseup = () => {
+        cropState.isDragging = false;
+    };
+
+    saveBtn.onclick = () => {
+        const resultCanvas = document.createElement('canvas');
+        resultCanvas.width = 128;
+        resultCanvas.height = 128;
+        const rCtx = resultCanvas.getContext('2d');
+
+        // La zone de crop visuelle (le carré pointillé) est à 100,100 et fait 100x100 dans un espace de 300x300
+        // On doit transformer ces coordonnées vers l'espace de l'image originale
+        const visualCropX = 100;
+        const visualCropY = 100;
+        const visualCropSize = 100;
+
+        const sourceX = (visualCropX - cropState.x) / cropState.zoom;
+        const sourceY = (visualCropY - cropState.y) / cropState.zoom;
+        const sourceSize = visualCropSize / cropState.zoom;
+
+        rCtx.drawImage(cropState.img, sourceX, sourceY, sourceSize, sourceSize, 0, 0, 128, 128);
+
+        customSkinURL = resultCanvas.toDataURL('image/jpeg', 0.8);
+        localStorage.setItem('customSkinURL', customSkinURL);
+        customSkinImg = new Image();
+        customSkinImg.src = customSkinURL;
+        alert("Skin personnalisé enregistré !");
+    };
+
+    resetBtn.onclick = () => {
+        customSkinURL = null;
+        customSkinImg = null;
+        localStorage.removeItem('customSkinURL');
+        area.style.display = 'none';
+        saveBtn.style.display = 'none';
+        alert("Skin réinitialisé (couleurs classiques).");
+    };
 }
 
 function renderShop() {
@@ -495,6 +678,19 @@ function createCoin() {
     const obs = obstacles.find(o => o.x > CONFIG.baseWidth - 120);
     let yPos = obs ? (obs.y === 0 ? CONFIG.baseHeight - 80 - Math.random() * 40 : 40 + Math.random() * 40) : (CONFIG.baseHeight / 2 - 10) + (Math.random() - 0.5) * 160;
     coins.push({ x: CONFIG.baseWidth, y: yPos, size: CONFIG.coinSize, collected: false, pulse: 0 });
+
+    // Spawn rare de Power-up
+    if (Math.random() > 0.85) {
+        const types = Object.keys(POWERUP_TYPES);
+        const typeKey = types[Math.floor(Math.random() * types.length)];
+        powerups.push({
+            x: CONFIG.baseWidth + 50,
+            y: (CONFIG.baseHeight / 2) + (Math.random() - 0.5) * 200,
+            type: POWERUP_TYPES[typeKey],
+            size: 25,
+            pulse: 0
+        });
+    }
 }
 
 // --- LOGIQUE MULTIJOUEUR ---
@@ -830,35 +1026,93 @@ function update(dt) {
     if (!gameActive) return;
 
     if (!isSpectating) {
-        score += factor;
+        score += factor * (activePowerups.slowmo ? 0.5 : 1); // Score un peu moins vite en slowmo
         scoreElement.innerText = `Score: ${Math.floor(score)}`;
         if (Math.floor(score) % 1000 < 2 && Math.floor(score) > 0) gameSpeed += currentTheme.increase;
     }
 
+    const effectiveSpeed = gameSpeed * (activePowerups.slowmo ? 0.5 : 1);
+
     if (shakeAmount > 0) shakeAmount *= 0.9;
     if (shakeAmount < 0.1) shakeAmount = 0;
 
+    // Mise à jour des Power-ups actifs
+    const indicators = document.getElementById('powerup-indicators');
+    if (indicators) indicators.innerHTML = '';
+
+    Object.keys(activePowerups).forEach(type => {
+        activePowerups[type] -= dt;
+        if (activePowerups[type] <= 0) {
+            delete activePowerups[type];
+        } else {
+            // Rendu de l'indicateur HUD
+            const pwr = Object.values(POWERUP_TYPES).find(p => p.id === type);
+            if (pwr && indicators) {
+                const percent = (activePowerups[type] / pwr.duration) * 100;
+                const div = document.createElement('div');
+                div.className = 'powerup-bar';
+                if (activePowerups[type] < 2000) div.classList.add('pwr-warning'); // Flash à la fin
+
+                div.innerHTML = `
+                    <div class="pwr-progress" style="background: conic-gradient(${pwr.color} ${percent}%, rgba(255,255,255,0.1) 0)"></div>
+                    <div class="pwr-icon">${pwr.icon}</div>
+                `;
+                indicators.appendChild(div);
+            }
+        }
+    });
+
     // --- MISE À JOUR VISUELLE COMMUNE (Joueur ou Spectateur) ---
     backgroundLayers.forEach(layer => layer.forEach(s => {
-        s.x -= gameSpeed * s.speed * factor;
+        s.x -= effectiveSpeed * s.speed * factor;
         if (s.x < -20) s.x = 800 + 20;
-        if (s.y < -20) s.y = 400 + 20;
-        if (s.y > 400 + 20) s.y = -20;
     }));
 
     obstacles.forEach((o, i) => {
-        o.x -= gameSpeed * factor;
-        if (!isSpectating && checkCollision(player, o)) endGame();
+        o.x -= effectiveSpeed * factor;
+        if (o.vy) {
+            o.y += o.vy * factor;
+            if (o.y <= 0 || o.y + o.h >= 400) o.vy *= -1;
+        }
+
+        if (!isSpectating && checkCollision(player, o)) {
+            endGame();
+        }
         if (o.x + o.w < 0) obstacles.splice(i, 1);
     });
 
     coins.forEach((c, i) => {
-        c.x -= gameSpeed * factor; c.pulse += 0.1 * factor;
+        c.x -= effectiveSpeed * factor; c.pulse += 0.1 * factor;
+
+        // Effet Aimant
+        if (activePowerups.magnet && !c.collected) {
+            const dx = (player.x + player.size / 2) - c.x;
+            const dy = (player.y + player.size / 2) - c.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 600) {
+                c.x += (dx / dist) * 8 * factor;
+                c.y += (dy / dist) * 8 * factor;
+            }
+        }
+
         if (!isSpectating && !c.collected && checkCollision(player, { x: c.x - 2, y: c.y - 2, w: c.size + 4, h: c.size + 4 })) {
             c.collected = true; currentSessionNéons += currentTheme.reward; updateNéonUI();
             for (let j = 0; j < 8; j++) createParticle(c.x, c.y, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, "#ffd700", Math.random() * 4 + 2);
         }
         if (c.x + c.size < 0 || c.collected) coins.splice(i, 1);
+    });
+
+    powerups.forEach((p, i) => {
+        p.x -= effectiveSpeed * factor;
+        p.pulse += 0.05 * factor;
+        if (!isSpectating && checkCollision(player, { x: p.x, y: p.y, w: p.size, h: p.size })) {
+            activePowerups[p.type.id] = p.type.duration;
+            powerups.splice(i, 1);
+            // Particules de collecte
+            for (let j = 0; j < 15; j++) createParticle(p.x, p.y, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, p.type.color, Math.random() * 5 + 3);
+        } else if (p.x + p.size < 0) {
+            powerups.splice(i, 1);
+        }
     });
 
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -873,7 +1127,14 @@ function update(dt) {
         if (isHost || !peer || (!conn && connections.length === 0)) {
             const isTop = Math.random() > 0.5;
             const h = 60 + Math.random() * 120;
-            const newObs = { x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h };
+            let newObs = { x: 800, y: isTop ? 0 : 400 - h, w: 35, h: h };
+
+            // Variété d'obstacles
+            const rand = Math.random();
+            if (activeThemeKey === 'lava' && rand > 0.7) {
+                newObs.vy = (Math.random() - 0.5) * 4; // Cube mobile
+            }
+
             obstacles.push(newObs);
             lastObstacleTime = 0;
 
@@ -972,6 +1233,8 @@ function draw() {
     const pColor = customColors[activePlayerColor].value || currentTheme.player;
     const partColor = customColors[activeParticleColor].value || currentTheme.player;
 
+    const isCustomSkinActive = customSkinImg && customSkinImg.complete && customSkinImg.naturalWidth !== 0;
+
     trail.forEach((pos, index) => {
         // En multi, on cache aussi la traînée si on est mort
         if (peer && (conn || connections.length > 0) && isSpectating) return;
@@ -980,8 +1243,13 @@ function draw() {
         ctx.save();
         ctx.translate(pos.x + player.size / 2, pos.y + player.size / 2);
         ctx.rotate(pos.rotation);
-        ctx.fillStyle = pColor;
-        style.draw(ctx, 0, 0, player.size);
+
+        if (isCustomSkinActive) {
+            ctx.drawImage(customSkinImg, -player.size / 2, -player.size / 2, player.size, player.size);
+        } else {
+            ctx.fillStyle = pColor;
+            style.draw(ctx, 0, 0, player.size);
+        }
         ctx.restore();
     });
 
@@ -1010,7 +1278,31 @@ function draw() {
             ctx.shadowBlur = 15;
             ctx.shadowColor = pColor;
             ctx.fillStyle = pColor;
-            style.draw(ctx, 0, 0, player.size);
+
+            if (customSkinImg && customSkinImg.complete && customSkinImg.naturalWidth !== 0) {
+                ctx.drawImage(customSkinImg, -player.size / 2, -player.size / 2, player.size, player.size);
+            } else {
+                style.draw(ctx, 0, 0, player.size);
+            }
+
+            // Effets visuels des Power-ups sur le joueur
+            let ringRadius = player.size / 2 + 6;
+            Object.keys(activePowerups).forEach(type => {
+                const pwr = Object.values(POWERUP_TYPES).find(p => p.id === type);
+                if (pwr) {
+                    const ratio = activePowerups[type] / pwr.duration;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, ringRadius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * ratio));
+                    ctx.strokeStyle = pwr.color;
+                    ctx.lineWidth = 3;
+                    ctx.lineCap = 'round';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = pwr.color;
+                    ctx.stroke();
+                    ringRadius += 6;
+                }
+            });
+
             ctx.restore();
         }
     }
@@ -1035,12 +1327,23 @@ function draw() {
     }
 
     ctx.shadowBlur = 10; ctx.shadowColor = currentTheme.obs; ctx.fillStyle = currentTheme.obs;
-    obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+    obstacles.forEach(o => {
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+    });
 
     ctx.shadowBlur = 15; ctx.shadowColor = "#ffd700"; ctx.fillStyle = "#ffd700"; ctx.strokeStyle = "white"; ctx.lineWidth = 2;
     coins.forEach(c => {
         const ps = Math.sin(c.pulse) * 4;
         ctx.beginPath(); ctx.moveTo(c.x + c.size / 2, c.y - ps); ctx.lineTo(c.x + c.size + ps, c.y + c.size / 2); ctx.lineTo(c.x + c.size / 2, c.y + c.size + ps); ctx.lineTo(c.x - ps, c.y + c.size / 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+    });
+
+    // Power-ups
+    powerups.forEach(p => {
+        ctx.shadowBlur = 20; ctx.shadowColor = p.type.color; ctx.fillStyle = p.type.color;
+        const ps = Math.sin(p.pulse) * 5;
+        ctx.font = `${p.size + ps}px Arial`;
+        ctx.textAlign = "center";
+        ctx.fillText(p.type.icon, p.x + p.size / 2, p.y + p.size);
     });
 
     ctx.restore();
@@ -1125,6 +1428,15 @@ function drawMenuBackground() {
 function switchGravity() { if (gameActive && !isSpectating) { player.onCeiling = !player.onCeiling; targetRotation += Math.PI; } }
 
 function endGame() {
+    if (activePowerups.shield) {
+        delete activePowerups.shield;
+        shakeAmount = 10;
+        // Effet de destruction du bouclier
+        for (let j = 0; j < 20; j++) createParticle(player.x, player.y, (Math.random() - 0.5) * 15, (Math.random() - 0.5) * 15, "#00ffcc", Math.random() * 6 + 2);
+        // On ignore la mort et on continue
+        obstacles = obstacles.filter(o => o.x > player.x + 200 || o.x < player.x - 50);
+        return;
+    }
     shakeAmount = 20;
 
     // Force sync immédiat pour informer les autres de la mort
@@ -1240,6 +1552,11 @@ function confirmDeath() {
 
     showScreen('gameOver');
     stopMusic();
+
+    const isMulti = peer && (conn || connections.length > 0);
+    const replayBtn = document.getElementById('replayBtnGameOver');
+    if (replayBtn) replayBtn.style.display = isMulti ? 'none' : 'block';
+
     earnedNéonsElement.innerText = `+${currentSessionNéons}`;
     finalScoreElement.innerHTML = `<span style="color: ${currentTheme.player}">${currentTheme.name}</span><br>SCORE: ${Math.floor(score)}<br><span style="font-size: 0.8em; color: #ffd700;">RECORD: ${best}</span>`;
 
@@ -1281,6 +1598,12 @@ function backToMenu() {
     } else {
         showScreen('menu');
         updateNéonUI();
+    }
+}
+
+function replayGame() {
+    if (activeThemeKey) {
+        startGame(activeThemeKey);
     }
 }
 

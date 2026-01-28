@@ -64,6 +64,14 @@
                 </div>
 
                 <div class="setting-group">
+                    <label>Qualité Graphique</label>
+                    <select id="qualitySelect" class="neon-select">
+                        <option value="high" selected>Haute (Ombres)</option>
+                        <option value="low">Performance (Fluide)</option>
+                    </select>
+                </div>
+
+                <div class="setting-group">
                     <label>Densité Particules</label>
                     <select id="particleDensity" class="neon-select">
                         <option value="low">Faible</option>
@@ -93,10 +101,42 @@
                 <button class="tab-btn active" onclick="switchTab('shapes')">FORMES</button>
                 <button class="tab-btn" onclick="switchTab('colors-player')">COULEUR FORME</button>
                 <button class="tab-btn" onclick="switchTab('colors-particles')">COULEUR PARTICULES</button>
+                <button class="tab-btn" onclick="switchTab('custom-image')">IMAGE (SKIN)</button>
             </div>
 
             <div id="shopGrid" class="shop-grid">
                 <!-- Items générés par JS -->
+            </div>
+
+            <div id="customSkinEditor"
+                style="display: none; flex-direction: column; gap: 15px; align-items: center; margin-bottom: 20px;">
+                <div class="upload-container">
+                    <label for="skinImageInput" class="btn-level"
+                        style="cursor: pointer; display: inline-block;">CHOISIR UNE IMAGE</label>
+                    <input type="file" id="skinImageInput" accept="image/png, image/jpeg" style="display: none;">
+                </div>
+
+                <div id="cropArea"
+                    style="position: relative; max-width: 300px; max-height: 300px; overflow: hidden; border: 2px solid var(--accent); border-radius: 12px; display: none;">
+                    <canvas id="cropCanvas"></canvas>
+                    <div id="cropSelector"
+                        style="position: absolute; border: 2px dashed white; box-shadow: 0 0 0 2000px rgba(0,0,0,0.5); width: 100px; height: 100px; cursor: move; pointer-events: none;">
+                    </div>
+                </div>
+
+                <div class="editor-actions" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <label class="label-sm">ZOOM :</label>
+                        <input type="range" id="cropZoomSlider" min="0.1" max="5" step="0.1" value="1"
+                            class="neon-slider">
+                    </div>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <button id="saveCropBtn" class="btn-primary btn-sm" style="display: none; flex: 1;">VALIDER LE
+                            CROP</button>
+                        <button id="resetSkinBtn" class="btn-skip btn-sm" style="flex: 1;">RÉINITIALISER</button>
+                    </div>
+                </div>
+                <p class="label-sm" style="opacity: 0.6;">Déplace l'image pour cadrer le carré central</p>
             </div>
             <button onclick="closeShop()" class="btn-secondary">RETOUR AU MENU</button>
         </section>
@@ -166,6 +206,8 @@
                     <div id="score" aria-live="polite">Score: 0</div>
                     <div id="bestScore">Record: 0</div>
                 </div>
+                <!-- Nouveau: Indicateurs de Power-ups -->
+                <div id="powerup-indicators"></div>
                 <div id="currentNéonsHUD">Néons: 0</div>
             </div>
             <canvas id="gameCanvas"></canvas>
@@ -199,6 +241,8 @@
                 <span id="earnedNéons" class="earned-value">+0</span>
             </div>
             <div class="game-over-actions" style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                <button id="replayBtnGameOver" onclick="replayGame()" class="btn-level"
+                    style="margin: 0; width: 100%;">REJOUER</button>
                 <button onclick="backToMenu()" class="btn-primary">RETOUR AU MENU</button>
             </div>
         </section>

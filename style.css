@@ -586,6 +586,105 @@ button:hover::after {
     color: rgba(255, 255, 255, 0.5);
 }
 
+/* Power-up Items in World */
+.powerup-shield {
+    filter: drop-shadow(0 0 10px #00ffcc);
+}
+
+.powerup-magnet {
+    filter: drop-shadow(0 0 10px #ffd700);
+}
+
+.powerup-slowmo {
+    filter: drop-shadow(0 0 10px #a855f7);
+}
+
+/* HUD Power-ups */
+#powerup-indicators {
+    display: flex;
+    gap: 15px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    top: 10px;
+}
+
+.powerup-bar {
+    width: 50px;
+    height: 50px;
+    background: rgba(15, 23, 42, 0.8);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    animation: pwrIn 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+
+.pwr-icon {
+    font-size: 1.5rem;
+    z-index: 2;
+}
+
+.pwr-progress {
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    mask: radial-gradient(transparent 58%, white 60%);
+    -webkit-mask: radial-gradient(transparent 58%, white 60%);
+    transition: background 0.1s linear;
+}
+
+.pwr-warning {
+    animation: pwrFlash 0.5s infinite alternate;
+}
+
+@keyframes pwrFlash {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    to {
+        opacity: 0.5;
+        transform: scale(0.9);
+    }
+}
+
+@keyframes pwrIn {
+    from {
+        transform: scale(0) rotate(-45deg);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1) rotate(0);
+        opacity: 1;
+    }
+}
+
+@keyframes pulseShield {
+    0% {
+        box-shadow: 0 0 10px #00ffcc;
+    }
+
+    50% {
+        box-shadow: 0 0 30px #00ffcc;
+    }
+
+    100% {
+        box-shadow: 0 0 10px #00ffcc;
+    }
+}
+
+.shield-active {
+    animation: pulseShield 1s infinite alternate;
+}
+
 /* Scrollbar Style */
 .shop-grid::-webkit-scrollbar {
     width: 6px;
@@ -723,6 +822,38 @@ button:hover::after {
     box-shadow: 0 0 5px #ff0055;
 }
 
+/* Custom Skin Editor Styles */
+.upload-container {
+    margin: 10px 0;
+}
+
+#cropArea {
+    position: relative;
+    cursor: move;
+    box-shadow: 0 0 20px rgba(0, 255, 204, 0.2);
+    background: #000;
+}
+
+#cropCanvas {
+    display: block;
+}
+
+#cropSelector {
+    /* Le cadrage central fixe visualisé par le cropSelector */
+    position: absolute;
+    top: 100px;
+    left: 100px;
+    border: 2px dashed white;
+    box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.5);
+    width: 100px;
+    height: 100px;
+    pointer-events: none;
+}
+
+.editor-actions {
+    margin-top: 10px;
+}
+
 .host-controls {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     padding-top: 12px;
@@ -849,6 +980,7 @@ button:hover::after {
 /* Neon Sliders */
 .neon-slider {
     -webkit-appearance: none;
+    appearance: none;
     width: 100%;
     height: 6px;
     background: rgba(255, 255, 255, 0.1);
